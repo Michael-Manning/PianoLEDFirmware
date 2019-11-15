@@ -3,6 +3,7 @@
 
 //#include "constants.h"
 #include "m_constants.h"
+#include "music.h"
 
 #ifndef _KEYCOUNT
 #define _KEYCOUNT 53
@@ -65,6 +66,7 @@ namespace Colors{
     constexpr color Purple = {0, 255, 255};
 }
 
+void displayFrame(music::songFrame frame); 
 void displayErrorCode(byte error);
 void hideErrorCode();
 void setAnimationMode(AnimationMode mode);

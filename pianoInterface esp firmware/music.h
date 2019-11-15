@@ -1,6 +1,7 @@
 #ifndef MUSIC_H
 #define MUSIC_H
 
+#include <arduino.h>
 #include "m_constants.h"
 
 #define maxSongLength 1000
@@ -9,6 +10,8 @@
 namespace music
 {
 
+extern byte globalNoteStates[_PIANOSIZE];
+
 // Get only
 extern unsigned int songLength;
 
@@ -16,6 +19,8 @@ extern unsigned int songLength;
 extern bool looping; // If end is reached, song will always loop
 extern unsigned int loopStart;
 extern unsigned int loopEnd;
+
+constexpr unsigned int FirstNote = 20; //Note on the piano that corosponds with the first LED
 
 struct songFrame
 {

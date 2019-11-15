@@ -251,7 +251,6 @@ void pollEvents()
         if(!assert_fatal(expectedSongLength <= maxSongLength && expectedSongLength != 0, ErrorCode::SONG_LOAD_DISCONTINUITY)){
             char buffer[128];
             sprintf(buffer, "ER:Song length out of range: %d", expectedSongLength);
-            // client.println("ER:Song length out of range");
             client.print(buffer);
             client.stop();
             return;

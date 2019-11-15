@@ -38,12 +38,11 @@ void setup()
   lights::setAnimationMode(lights::AnimationMode::ColorfulIdle);
   InitBuffer();
   network::beginConnection();
-  //xMutex = xSemaphoreCreateMutex();
 
   xTaskCreatePinnedToCore(
     PollThreadFunc,
     "thread2",
-    20000,
+    10000,
     NULL,
     1,
     &taskA,

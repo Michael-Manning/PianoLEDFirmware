@@ -3,6 +3,7 @@
 
 #include "m_error.h"
 #include "lighting.h"
+#include "music.h"
 
 namespace
 {
@@ -259,12 +260,19 @@ void updateAnimation()
         break;
     case AnimationMode::ProgressBar:
     {
-        int filledInKeys = _KEYCOUNT * progressBarValue;
+        float filledInKeys = _KEYCOUNT * progressBarValue;
         for (size_t i = 0; i < _KEYCOUNT; i++)
         {
+            // full On
             if(i <= filledInKeys){
                 setColor(i, Colors::Red);
             }
+            // Partially lit
+            else if(i < filledInKeys +1){
+                float opacity = filledInKeys - i;
+                setColor(i, colorF{opacity, 0.0f, 0.0f});
+            }
+            // Off
             else{
                 setColor(i, Colors::Off);
             }
@@ -291,6 +299,14 @@ void hideErrorCode()
 bool animationCompleted()
 {
     return animationComplete;
+}
+
+void displayFrame(music::songFrame frame){
+    for (size_t i = 0; i < _KEYCOUNT; i++)
+    {
+        //if(frame.firstnote)
+    }
+    
 }
 
 } // namespace lights
