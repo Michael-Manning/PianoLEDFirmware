@@ -48,11 +48,21 @@ enum class AnimationMode{
     PulseColor,
     BlinkSuccess,
     ColorfulIdle,
+    ProgressBar,
     None
 };
 
 namespace AnimationParameters{
     extern colorF PulseColor; 
+    void setProgressBarValue(float value);
+}
+
+namespace Colors{
+    constexpr color Off = {0, 0, 0};
+    constexpr color Red = {255, 0, 0};
+    constexpr color Blue = {0, 0, 255};
+    constexpr color Green = {0, 255, 0};
+    constexpr color Purple = {0, 255, 255};
 }
 
 void displayErrorCode(byte error);

@@ -13,7 +13,11 @@ enum class ErrorCode{
     WIFI_CONNECTION_FAILED = 131,
     WIFI_CONNECTION_LOST = 132,
     WIFI_DISCONNECTED = 133,
-    WIFI_CONNECTION_TIMEOUT = 134
+    WIFI_CONNECTION_TIMEOUT = 134,
+    BUFFER_OVERRUN = 135, // INTERNAL: Exceded the max length of a circular buffer
+    TCP_MESSAGE_INCOMPLETE = 136, // A message was recieved of the wrong length or was timed out
+    SONG_LOAD_DISCONTINUITY = 137, // Error detected in song loading process
+    INVALID_SONG_FRAME_INDEX = 138 // Exceded max song length while loaded, or accsess ilegally
 };
 
 bool fatalError(ErrorCode errorCode, bool exec = false);

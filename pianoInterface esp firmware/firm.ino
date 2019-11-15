@@ -1,3 +1,9 @@
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+// #include "task.h"
+// #include "semphr.h"
+
 #include "m_error.h"
 bool errorLock = false; // Read only. Set by fatalError
 #include "m_constants.h"
@@ -6,11 +12,13 @@ bool errorLock = false; // Read only. Set by fatalError
 #include "music.h"
 #include "pinaoCom.h"
 #include "network.h"
-
-//typedef size_t unsigned int;
+#include "circularBuffer.h"
 
 // modifide externally by network_h
-PlayMode mode = PlayMode::indicate;
+PlayMode globalMode = PlayMode::Idle;
+
+TaskHandle_t taskA;
+void PollThreadFunc(void * pvParameters);
 
 bool fatalError(ErrorCode errorCode, bool exec){
   if(exec)
@@ -27,17 +35,43 @@ void setup()
 {
    // Connect to strip and display the startup animation
   lights::init();
-  
+  lights::setAnimationMode(lights::AnimationMode::ColorfulIdle);
+  InitBuffer();
+  network::beginConnection();
+  //xMutex = xSemaphoreCreateMutex();
 
-  if(network::connect()){
+  xTaskCreatePinnedToCore(
+    PollThreadFunc,
+    "thread2",
+    20000,
+    NULL,
+    1,
+    &taskA,
+    1);
+}
+
+
+void PollThreadFunc(void *pvParameters)
+{
+  Event e;
+  e.action = []() {
     lights::setAnimationMode(lights::AnimationMode::BlinkSuccess);
-    while(!lights::animationCompleted()){
+    while (!lights::animationCompleted())
+    {
       lights::updateAnimation();
     }
     lights::setAnimationMode(lights::AnimationMode::ColorfulIdle);
+  };
+
+  if (network::waitForConnection())
+  {
+    network::startServer();
+    PushEvent(e);
   }
 
-
+  for(;;){
+      network::pollEvents();
+  }
 }
 
 void loop()
@@ -47,7 +81,27 @@ void loop()
     goto endLoopLabel;
   }
 
+  // Poll events
+  {
+    Event e;
+    while(PopEvent(&e)){
+      e.action();
+    }
+  }
+
   lights::updateAnimation();
+  //network::pollEvents();
+
+  switch (globalMode)
+  {
+  case PlayMode::Idle:
+    break;
+  case PlayMode::SongLoading:
+    break;
+  default:
+    break;
+  }
+  
     // unsigned int notesChanged = MIDI::pollMIDI();
     // network::pollEvents();
 

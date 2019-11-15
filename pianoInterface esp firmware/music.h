@@ -4,7 +4,7 @@
 #include "m_constants.h"
 
 #define maxSongLength 1000
-#define maxNoteCount 5000
+#define maxNoteCount 10000
 
 namespace music
 {

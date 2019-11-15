@@ -6,14 +6,6 @@
 
 namespace
 {
-//Extern
-// Get only
- unsigned int songLength = 0;
- bool looping = false;
- unsigned int loopStart = 0;
- unsigned int loopEnd = 0;
-
-
 byte noteData[maxNoteCount];
 music::songFrame frameData[maxSongLength];
 unsigned int frameLoaderIndex = 0;
@@ -23,7 +15,11 @@ unsigned int liveFrameIndex;
 
 namespace music
 {
-//typedef size_t unsigned int;
+//Extern
+ unsigned int songLength = 0;
+ bool looping = false;
+ unsigned int loopStart = 0;
+ unsigned int loopEnd = 0;
 
 void resetSongLoader()
 {

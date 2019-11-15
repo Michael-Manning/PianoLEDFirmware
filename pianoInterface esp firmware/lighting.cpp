@@ -23,6 +23,7 @@ bool showErrorCode = false; // Display the error code on top of everything else;
 byte errorCode = 0;
 float animationStartTime = 0;
 bool animationComplete = false; // Not all animations have an end
+float progressBarValue = 0.0f;
 constexpr float HSLRange_Over_KeyCount = 1530.0f / (float)_KEYCOUNT;
 
 constexpr colorF colorToColorF(color c)
@@ -37,7 +38,7 @@ constexpr color colorFToColor(colorF c)
 constexpr colorF indicateColorF = colorToColorF(lights::indicateColor);
 constexpr colorF inFramecolorF = colorToColorF(lights::inFrameColor);
 
-lights::AnimationMode animationMode = lights::AnimationMode::PulseError;
+lights::AnimationMode animationMode = lights::AnimationMode::None;
 } // namespace
 
 NeoPixelBus<NeoGrbwFeature, Neo800KbpsMethod> strip(_KEYCOUNT, _PIXELPIN);
@@ -105,6 +106,13 @@ typedef unsigned int size_t;
 
 namespace lights
 {
+
+namespace AnimationParameters
+{
+    void setProgressBarValue(float value){
+        progressBarValue = value;
+    }
+}
 
 void allOff()
 {
@@ -222,7 +230,7 @@ void updateAnimation()
         setAll({brightness, 0.0f, 0.0f});
         updateLEDS();
     }
-    break;
+        break;
     case AnimationMode::BlinkSuccess:
     {
         float brightness = sin((float)time * 20.0f) * 0.5f + 0.5f;
@@ -235,7 +243,7 @@ void updateAnimation()
         }
         updateLEDS();
     }
-    break;
+        break;
     case AnimationMode::ColorfulIdle:
     {
         for (unsigned int i = 0; i < _KEYCOUNT; i++)
@@ -248,7 +256,22 @@ void updateAnimation()
         }
         updateLEDS();
     }
-    break;
+        break;
+    case AnimationMode::ProgressBar:
+    {
+        int filledInKeys = _KEYCOUNT * progressBarValue;
+        for (size_t i = 0; i < _KEYCOUNT; i++)
+        {
+            if(i <= filledInKeys){
+                setColor(i, Colors::Red);
+            }
+            else{
+                setColor(i, Colors::Off);
+            }
+        }
+        updateLEDS();
+    }
+        break;
     default:
         break;
     }

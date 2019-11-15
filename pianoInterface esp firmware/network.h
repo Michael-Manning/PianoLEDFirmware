@@ -10,16 +10,20 @@
 //#include <music.h>
 
 enum class PlayMode{
-    indicate,
-    waiting,
-    fade
+    Idle = 1,
+    Indicate,
+    Waiting,
+    SongLoading
 };
 
-extern PlayMode mode;
+extern PlayMode globalMode;
 
 namespace network
 {
-    bool connect();
+    void beginConnection();
+    bool waitForConnection();
+    void startServer();
+    bool isConnected();
 
     void pollEvents();
 
