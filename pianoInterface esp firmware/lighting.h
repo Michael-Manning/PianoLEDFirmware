@@ -50,12 +50,14 @@ enum class AnimationMode{
     BlinkSuccess,
     ColorfulIdle,
     ProgressBar,
+    KeyIndicate,
     None
 };
 
 namespace AnimationParameters{
     extern colorF PulseColor; 
     void setProgressBarValue(float value);
+    // void KeyIndicate_PressKeys();
 }
 
 namespace Colors{

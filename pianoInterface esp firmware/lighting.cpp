@@ -4,6 +4,7 @@
 #include "m_error.h"
 #include "lighting.h"
 #include "music.h"
+#include "pinaoCom.h"
 
 namespace
 {
@@ -229,7 +230,6 @@ void updateAnimation()
     {
         float brightness = sin((float)time * 2.0f) * 0.5f + 0.5f;
         setAll({brightness, 0.0f, 0.0f});
-        updateLEDS();
     }
         break;
     case AnimationMode::BlinkSuccess:
@@ -242,7 +242,6 @@ void updateAnimation()
             animationMode = AnimationMode::None;
             allIdle();
         }
-        updateLEDS();
     }
         break;
     case AnimationMode::ColorfulIdle:
@@ -255,7 +254,6 @@ void updateAnimation()
             }
             setColor(i, sweepHSL((unsigned int)(index)));
         }
-        updateLEDS();
     }
         break;
     case AnimationMode::ProgressBar:
@@ -277,12 +275,29 @@ void updateAnimation()
                 setColor(i, Colors::Off);
             }
         }
-        updateLEDS();
+    }
+        break;
+    case AnimationMode::KeyIndicate:
+    {
+        for (size_t i = 0; i < _KEYCOUNT; i++)
+        {
+            bool state = MIDI::getNoteState(i + MIDI::ledNoteOffset);
+            if(state){
+                setColor(_KEYCOUNT - 1 - i, indicateColor);
+            }
+            else if(!music::isBlackNote(i)){
+                setColor(_KEYCOUNT - 1 - i, ambiantColor);
+            }
+            else{
+                setColor(_KEYCOUNT - 1 - i, Colors::Off);
+            }
+        }
     }
         break;
     default:
         break;
     }
+    updateLEDS();
 }
 
 void displayErrorCode(byte error)

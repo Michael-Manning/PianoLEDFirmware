@@ -15,7 +15,9 @@
 
 namespace MIDI
 {
-constexpr byte noteNumberOffset = 16;
+
+constexpr byte noteNumberOffset = 21; // MIDI note number for the first note
+constexpr byte ledNoteOffset = 15 ; // First note on the piano which has an LED 
 
 struct NoteEvent{
     bool state;
@@ -23,14 +25,12 @@ struct NoteEvent{
     byte velocity;
 };
 
-
-// Call this very often. Returns number of note state changes. Also updates the recent events
-unsigned int pollMIDI(); 
+void pollMIDI(); 
 
 NoteEvent * getRecentEvents();
 
 bool getNoteState(byte noteNumber); 
-bool connectMIDI();
+bool initUSBHost();
 
 }
 

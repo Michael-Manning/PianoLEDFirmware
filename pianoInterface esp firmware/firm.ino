@@ -13,6 +13,7 @@ bool errorLock = false; // Read only. Set by fatalError
 #include "pinaoCom.h"
 #include "network.h"
 #include "circularBuffer.h"
+#include "pinaoCom.h"
 
 // modifide externally by network_h
 PlayMode globalMode = PlayMode::Idle;
@@ -33,20 +34,29 @@ bool fatalError(ErrorCode errorCode, bool exec){
 
 void setup()
 {
+  //Serial.begin(115200);
+
+  // Assuiming the USB shield is connected, there's no reason this should fail.
+  bool USBSuccess = MIDI::initUSBHost();
    // Connect to strip and display the startup animation
   lights::init();
   lights::setAnimationMode(lights::AnimationMode::ColorfulIdle);
   InitBuffer();
-  network::beginConnection();
 
-  xTaskCreatePinnedToCore(
-    PollThreadFunc,
-    "thread2",
-    10000,
-    NULL,
-    1,
-    &taskA,
-    1);
+  // if the MAX3421E didn't connect, don't do anything besides set up the 
+  // LEDs so that the error code can be displayed.
+  if(USBSuccess){
+    network::beginConnection();
+
+    xTaskCreatePinnedToCore(
+        PollThreadFunc,
+        "thread2",
+        10000,
+        NULL,
+        1,
+        &taskA,
+        1);
+  }
 }
 
 
@@ -59,7 +69,8 @@ void PollThreadFunc(void *pvParameters)
     {
       lights::updateAnimation();
     }
-    lights::setAnimationMode(lights::AnimationMode::ColorfulIdle);
+    //lights::setAnimationMode(lights::AnimationMode::ColorfulIdle);
+    lights::setAnimationMode(lights::AnimationMode::KeyIndicate);
   };
 
   if (network::waitForConnection())
@@ -70,6 +81,7 @@ void PollThreadFunc(void *pvParameters)
 
   for(;;){
       network::pollEvents();
+      MIDI::pollMIDI();
   }
 }
 
@@ -88,8 +100,8 @@ void loop()
     }
   }
 
-  lights::updateAnimation();
   //network::pollEvents();
+  //MIDI::pollMIDI();
 
   switch (globalMode)
   {
@@ -97,10 +109,16 @@ void loop()
     break;
   case PlayMode::SongLoading:
     break;
+  case PlayMode::Indicate:
+
+    break;
   default:
     break;
   }
   
+  lights::updateAnimation();
+
+
     // unsigned int notesChanged = MIDI::pollMIDI();
     // network::pollEvents();
 

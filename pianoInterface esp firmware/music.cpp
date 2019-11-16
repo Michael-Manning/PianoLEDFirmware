@@ -2,7 +2,7 @@
 //#include "M_Assert.h"
 #include "music.h"
 
-#include "pinaoCom.h"
+//#include "pinaoCom.h"
 
 namespace
 {
@@ -78,14 +78,14 @@ void setFrame(unsigned int index)
 
 bool checkFrameCompletion()
 {
-    songFrame *frame = currentFrame();
-    byte *note = frame->firstNote;
-    while (note != frame->lastNote)
-    {
-        if(!MIDI::getNoteState(*note))
-            return false;
-        note ++;
-    }
+    // songFrame *frame = currentFrame();
+    // byte *note = frame->firstNote;
+    // while (note != frame->lastNote)
+    // {
+    //     if(!MIDI::getNoteState(*note))
+    //         return false;
+    //     note ++;
+    // }
     return true;
 }
 

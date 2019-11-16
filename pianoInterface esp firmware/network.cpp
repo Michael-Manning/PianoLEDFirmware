@@ -213,7 +213,7 @@ void pollEvents()
         }
         Event e;
         e.action = [](){
-            globalMode = 
+          //  globalMode = 
         };
         PushEvent(e);
     }

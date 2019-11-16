@@ -20,8 +20,6 @@ extern bool looping; // If end is reached, song will always loop
 extern unsigned int loopStart;
 extern unsigned int loopEnd;
 
-constexpr unsigned int FirstNote = 20; //Note on the piano that corosponds with the first LED
-
 struct songFrame
 {
     byte *firstNote;

@@ -15,7 +15,7 @@ union EventData
     };
     struct PlayModeChange{
         PlayMode mode;
-    }
+    };
     struct error{
         byte errorCode;
     };   
