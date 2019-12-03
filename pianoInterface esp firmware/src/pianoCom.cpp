@@ -52,15 +52,13 @@ bool logicalStateBuffer[_PIANOSIZE];
 // in effect a note pressed "event". This can only cause errors if a note is pressed more often than the array is polled.
 bool logicalStateLayer[_PIANOSIZE];
 
-#ifdef MICROBRUTE_DEBUG
-char buf[24];
-#endif
-
 } // namespace
 
 namespace MIDI
 {
 
+// Starts up communications with the MAX3421E module.
+// Returns success
 bool initUSBHost()
 {
     if (!assert_fatal(Usb.Init() == 0, ErrorCode::USB_HOST_INITIALISATION))
@@ -69,32 +67,12 @@ bool initUSBHost()
     }
     xMutex = xSemaphoreCreateMutex();
 
-#ifdef MICROBRUTE_DEBUG
-    Serial.println("USB init success");
-#endif
-
     vid = pid = 0;
     USBInit = true;
     return true;
 }
 
-
-// Thread safe copy from the real time logical state buffer to the led managed logical state layer.
-// Copy this a few hundred times per second.
-// THREAD 0
-void copyLogicalStateBuffer(){
-    xSemaphoreTake(xMutex, portMAX_DELAY);
-    memcpy(logicalStateLayer, logicalStateBuffer, sizeof(byte) * _PIANOSIZE);
-    memset(logicalStateBuffer, 0, sizeof(logicalStateBuffer));
-    xSemaphoreGive(xMutex);
-}
-
-// Using the mutex has a performance cost, so it can be disabled when not in use
-void setLogicalLayerEnable(bool enabled){
-    logicalLayerEnabled = enabled;
-}
-
-// THREAD 1
+// THREAD 1: Gets new note events from the MIDI device
 void pollMIDI()
 {
 
@@ -189,17 +167,34 @@ void pollMIDI()
 #endif
 }
 
+// Gets the pressed state of a note in real time
 bool getNoteState(byte noteNumber)
 {
     return noteStates[noteNumber];
 }
 
-// THREAD 0 
+// THREAD 0: Gets the logical 'event' state of a note from the third note layer.
+// Note: Getting the logical state note value clears the value in this layer.
+// Note: The notes in this layer are only updated 100 times per second (see firm.ino).
 bool getLogicalState(byte noteNumber)
 {
     bool val = logicalStateLayer[noteNumber];
     logicalStateLayer[noteNumber] = 0; // reset to simulate event logic
     return val;
+}
+
+// THREAD 0: Thread safe copy from the real time logical state buffer to the led managed logical state layer.
+// Copy this a few hundred times per second.
+void copyLogicalStateBuffer(){
+    xSemaphoreTake(xMutex, portMAX_DELAY);
+    memcpy(logicalStateLayer, logicalStateBuffer, sizeof(byte) * _PIANOSIZE);
+    memset(logicalStateBuffer, 0, sizeof(logicalStateBuffer));
+    xSemaphoreGive(xMutex);
+}
+
+// Enabled or disables the logical layer functionality which can effect performance costs due to mutex use
+void setLogicalLayerEnable(bool enabled){
+    logicalLayerEnabled = enabled;
 }
 
 } // namespace MIDI

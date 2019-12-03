@@ -1,11 +1,13 @@
-#include <Arduino.h>
-#include "network.h"
+#include <stdint.h>
 #include <WiFi.h>
-#include "music.h"
-#include "m_error.h"
-#include "m_constants.h"
+
 #include "circularBuffer.h"
+#include "lighting/lighting.h"
+#include "m_constants.h"
+#include "m_error.h"
+#include "music.h"
 #include "pinaoCom.h"
+#include "network.h"
 
 /**
  * PROTOCOL SPECIFICATION:
@@ -15,7 +17,7 @@
  * byte 1: message type
  * 
  * message type: 
- *      1 = change mode
+ *      1 = unused
  *      2 = update loop setting
  *      3 = begin loading song
  *      4 = song data
@@ -28,13 +30,8 @@
  * 
  * -------- 1
  * 
- * change mode:
- * byte 2: mode number
- * 
- * mode number:
- *      1 = indicate
- *      2 = wait
- *      3 = fade
+ * unused:
+ * none
  * 
  * -------- 2
  * 
@@ -85,7 +82,7 @@ namespace
 bool connected;
 byte messageBuffer[8];
 
-bool networkBusy = false; // not implimented
+// these are for song loading
 unsigned int expectedSongLength = 0;
 unsigned int loaderFrameIndex;      // What frame of the song was last loaded
 byte frameNoteIndex;                // How many notes for the currently loading frame have been loaded
@@ -94,6 +91,7 @@ byte currentFrameNotes[_PIANOSIZE]; // Storage for loading notes in the frame be
 WiFiServer server(80);
 WiFiClient client; // persistant accross poll calls.
 
+// combine to bytes into the unsigned short they make together
 uint16_t concatBytes(uint8_t A, uint8_t B)
 {
     uint16_t combined = A;
@@ -107,14 +105,16 @@ uint16_t concatBytes(uint8_t A, uint8_t B)
 namespace network
 {
 
-const char *hostName = "PianoESP";
-
+// Starts connecting to the WIFI network
 void beginConnection()
 {
-    WiFi.setHostname(hostName);
+    //WiFi.setHostname(hostName);
     WiFi.mode(WIFI_AP_STA);
     WiFi.begin(_SSID, _NETWORKKEY);
 }
+
+// Blocks until WIFI connection has been established.
+// Returns success.
 bool waitForConnection()
 {
     unsigned int attempts = 0;
@@ -156,14 +156,20 @@ bool waitForConnection()
     connected = true;
     return true;
 }
+
+// Starts the TCP server
 void startServer()
 {
     server.begin();
 }
+
+// Whether the network is currently connected
 bool isConnected()
 {
     return connected;
 }
+
+// Checks for incomming messages and handles them
 void pollEvents()
 {
     // Client may still be connected since last poll call
@@ -181,6 +187,7 @@ void pollEvents()
 
     // At this point we know there is client connected
 
+    // check if the client has any data it's trying to send
     if (!client.available())
     {
         return;
@@ -212,28 +219,8 @@ void pollEvents()
     // change mode
     case 1:
     {
-        PlayMode mode;
-        switch (messageBuffer[1])
-        {
-        case 1:
-            mode = PlayMode::Idle;
-            break;
-        case 2:
-            mode = PlayMode::Indicate;
-            break;
-        case 3:
-            mode = PlayMode::Waiting;
-            break;
-        default:
-            client.write("ER:Unknown PlayMode");
-            return;
-            break;
-        }
-        Event e;
-        e.action = []() {
-            //  globalMode =
-        };
-        PushEvent(e);
+        fatalError(ErrorCode::NOT_IMPLIMENTED);
+        return;
     }
     break;
     // update loop setting
@@ -243,10 +230,12 @@ void pollEvents()
         uint16_t loopStart = concatBytes(messageBuffer[2], messageBuffer[3]);
         uint16_t loopEnd = concatBytes(messageBuffer[4], messageBuffer[5]);
         music::setLoopingSettings(enabled, loopStart, loopEnd);
-        if(!enabled){
+        if (!enabled)
+        {
             client.print("OK: Looping disabled");
         }
-        else{
+        else
+        {
             char buffer[128];
             sprintf(buffer, "OK: Looping from %d to %d", loopStart, loopEnd);
             client.print(buffer);
@@ -272,7 +261,7 @@ void pollEvents()
         frameNoteIndex = 0;
         loaderFrameIndex = 0;
 
-        if (!assert_fatal(expectedSongLength <= maxSongLength && expectedSongLength != 0, ErrorCode::SONG_LOAD_DISCONTINUITY))
+        if (!assert_fatal(expectedSongLength <= music::maxSongLength && expectedSongLength != 0, ErrorCode::SONG_LOAD_DISCONTINUITY))
         {
             char buffer[128];
             sprintf(buffer, "ER:Song length out of range: %d", expectedSongLength);
@@ -281,20 +270,21 @@ void pollEvents()
             return;
         }
 
-        music::resetSongLoader();
-        Event e;
-        e.action = []() {
-            globalMode = PlayMode::SongLoading;
-            lights::setAnimationMode(lights::AnimationMode::ProgressBar);
-            lights::AnimationParameters::setProgressBarValue(0.0f);
-        };
-        PushEvent(e);
-
+        // reply OK
         {
             char buffer[128];
             sprintf(buffer, "Song header OK. Length: %d", expectedSongLength);
             client.print(buffer);
         }
+
+        // update progress bar
+        music::resetSongLoader();
+        Event e;
+        e.action = []() {
+            lights::setAnimationMode(lights::AnimationMode::ProgressBar);
+            lights::AnimationParameters::setProgressBarValue(0.0f);
+        };
+        PushEvent(e);
     }
     break;
     // song data
@@ -359,6 +349,13 @@ void pollEvents()
             frameNoteIndex++;
         }
 
+        // Reply with OK + debug info
+        {
+            char buffer[128];
+            sprintf(buffer, "OK: %d notes loaded for frame %d", frameNoteIndex, loaderFrameIndex);
+            client.print(buffer);
+        }
+
         // Update the progress bar display
         Event e;
         e.action = []() {
@@ -366,25 +363,20 @@ void pollEvents()
             lights::AnimationParameters::setProgressBarValue(progress);
         };
         PushEvent(e);
-
-        // Reply with OK + debug info
-        {
-            char buffer[128];
-            sprintf(buffer, "OK: %d notes loaded for frame %d", frameNoteIndex, loaderFrameIndex);
-            client.print(buffer);
-        }
     }
     break;
     // song ending
     case 5:
     {
-        if(loaderFrameIndex != expectedSongLength -1){                  
+        if (loaderFrameIndex != expectedSongLength - 1)
+        {
             char buffer[128];
             sprintf(buffer, "ER:Expected %d notes, but only recieved %d", expectedSongLength - 1, loaderFrameIndex);
             fatalError(ErrorCode::SONG_LOAD_DISCONTINUITY);
-            client.print(buffer);      
+            client.print(buffer);
         }
-        else{
+        else
+        {
             Event e;
             e.action = []() {
                 lights::setAnimationMode(lights::AnimationMode::BlinkSuccess);
@@ -392,7 +384,6 @@ void pollEvents()
                 {
                     lights::updateAnimation();
                 }
-                // globalMode == PlayMode::Waiting;
                 lights::setAnimationMode(lights::AnimationMode::Waiting);
             };
             PushEvent(e);
@@ -402,27 +393,6 @@ void pollEvents()
 
             client.print("OK: Song loaded");
         }
-        // char bbuffer[128];
-        // for (size_t i = 0; i < 10; i++)
-        // {
-        //     music::songFrame frame;
-        //     if (!music::getFrame(i, &frame))
-        //     {
-        //         return;
-        //     }
-        //     //music::songFrame frame = music::Temp(i);
-        //     Serial.print("first: ");
-        //     Serial.print(*frame.firstNote);
-        //     Serial.print(", ");
-        //     sprintf(bbuffer, "%p", frame.firstNote);
-        //     Serial.print(bbuffer);
-        //     Serial.print(" last: ");
-        //     Serial.print(*frame.lastNote);
-        //     Serial.print(", ");
-        //     sprintf(bbuffer, "%p", frame.lastNote);
-        //     Serial.println(bbuffer);
-        // }
-
     }
     break;
     // set song index
@@ -430,7 +400,7 @@ void pollEvents()
     {
         uint16_t newIndex = concatBytes(messageBuffer[1], messageBuffer[2]);
         music::setFrame(newIndex);
-         char buffer[128];
+        char buffer[128];
         sprintf(buffer, "OK: index set to [%d]", music::currentFrameIndex());
         client.print(buffer);
 
@@ -442,8 +412,19 @@ void pollEvents()
     }
     break;
     case 7:
-        client.print("Status: OK");
-        break;
+    {
+        if (isErrorLocked())
+        {
+            char buffer[128];
+            sprintf(buffer, "Status: Error lock code: %d", static_cast<uint8_t>(getCurrentError()));
+            client.print(buffer);
+        }
+        else
+        {
+            client.print("Status: OK");
+        }
+    }
+    break;
     case 8:
     {
         char buffer[128];
@@ -452,10 +433,12 @@ void pollEvents()
     }
     break;
     default:
+    {
         char buffer[128];
         sprintf(buffer, "ER:Unrecognized command header: %d", messageBuffer[0]);
         client.print(buffer);
-        break;
+    }
+    break;
     }
 }
 } // namespace network

@@ -1,9 +1,10 @@
 #ifndef LIGHTING_H
 #define LIGHTING_H
 
-//#include "constants.h"
-#include "m_constants.h"
-#include "music.h"
+#include <stdint.h>
+
+#include "../m_constants.h"
+#include "../music.h"
 #include "color.h"
 
 #ifndef _KEYCOUNT
@@ -15,15 +16,6 @@
 #endif
 
 #define noColor {0, 0, 0}
-
-/**
- * Add more feedback animations to indicate things such as
- * a song being loaded in or a setting being changed successfully
- */
-
-
-//color operator+(color &a, color &b) { return {a.r + b.r, a.g + b.g, a.b + b.b};};
-
 
 namespace lights
 {
@@ -63,13 +55,12 @@ namespace Colors{
 }
 
 void displayFrame(music::songFrame frame); 
-void displayErrorCode(byte error);
+void displayErrorCode(uint8_t error);
 void hideErrorCode();
 void setAnimationMode(AnimationMode mode);
 void updateAnimation();
 bool animationCompleted();
 void setIndicate(uint8_t key, bool state);
-void setInFrame(byte key, bool state); // Sets to indicate if false!
 void setFadOut(uint8_t key, colorF col);
 void allOff();
 void init();

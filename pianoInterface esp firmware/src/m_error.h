@@ -1,11 +1,6 @@
 #ifndef MERROR_H
 #define MERROR_H
 
-#include <Arduino.h>
-#include "lighting.h"
-
-extern bool errorLock;
-
 enum class ErrorCode{
     IMPOSSIBLE_INTERNAL = 255,
     INVALID_LED_INDEX = 129, // INTERNAL: Function call in lighting was missused
@@ -21,8 +16,14 @@ enum class ErrorCode{
     USB_HOST_INITIALISATION = 139, // Could not communicate with the MAX3421E module
     USB_TIMEOUT = 140,
     NULL_SONG_FRAME = 141,
-    INVALID_LOOP_SETTING = 142
+    INVALID_LOOP_SETTING = 142,
+    NOT_IMPLIMENTED = 143, // Unfinished section of code was accessed by accident
+    NO_ERROR = 144
 };
+
+bool isErrorLocked();
+
+ErrorCode getCurrentError();
 
 bool fatalError(ErrorCode errorCode, bool exec = false);
 

@@ -12,28 +12,19 @@
 namespace MIDI
 {
 
-#ifdef MICROBRUTE_DEBUG
 constexpr byte noteNumberOffset = 21; // MIDI note number for the first note
 constexpr byte ledNoteOffset = 15 ; // First note on the piano which has an LED 
-#else
-constexpr byte noteNumberOffset = 21; // MIDI note number for the first note
-constexpr byte ledNoteOffset = 15 ; // First note on the piano which has an LED 
-#endif
 
-struct NoteEvent{
-    bool state;
-    byte number;
-    byte velocity;
-};
+bool initUSBHost();
 
 void pollMIDI(); 
 
-NoteEvent * getRecentEvents();
-
 bool getNoteState(byte noteNumber); 
+
 bool getLogicalState(byte noteNumber);
-bool initUSBHost();
+
 void copyLogicalStateBuffer();
+
 void setLogicalLayerEnable(bool enabled);
 
 }

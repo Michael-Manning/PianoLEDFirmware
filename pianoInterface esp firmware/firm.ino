@@ -1,22 +1,16 @@
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
-// #include "task.h"
-// #include "semphr.h"
-
-#include "m_error.h"
-bool errorLock = false; // Read only. Set by fatalError
-#include "m_constants.h"
 #include <Arduino.h>
-#include "lighting.h"
-#include "music.h"
-#include "pinaoCom.h"
-#include "network.h"
-#include "circularBuffer.h"
-#include "pinaoCom.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 
-// modifide externally by network_h
-PlayMode globalMode = PlayMode::Idle;
+#include "src/circularBuffer.h"
+#include "src/lighting/lighting.h"
+#include "src/m_error.h"
+#include "src/m_constants.h"
+#include "src/music.h"
+#include "src/network.h"
+#include "src/pinaoCom.h"
 
 TaskHandle_t taskA;
 void PollThreadFunc(void *pvParameters);
@@ -24,21 +18,7 @@ void PollThreadFunc(void *pvParameters);
 unsigned long poll100Timer = 0;
 void poll100();
 
-bool fatalError(ErrorCode errorCode, bool exec)
-{
-  if (exec)
-  {
-    return true;
-  }
-  // Don't want to overrite another error code
-  if(errorLock == true){
-    return false;
-  }
-  errorLock = true;
-  lights::displayErrorCode((byte)errorCode);
-  lights::setAnimationMode(lights::AnimationMode::PulseError);
-  return false;
-};
+
 
 void setup()
 {
@@ -46,6 +26,7 @@ void setup()
 
   // Assuiming the USB shield is connected, there's no reason this should fail.
   bool USBSuccess = MIDI::initUSBHost();
+
   // Connect to strip and display the startup animation
   lights::init();
   lights::setAnimationMode(lights::AnimationMode::ColorfulIdle);
@@ -55,8 +36,10 @@ void setup()
   // LEDs so that the error code can be displayed.
   if (USBSuccess)
   {
+    // Start up the network connection
     network::beginConnection();
 
+    // Spin up the second thread on core 1 which handles TCP and MIDI
     xTaskCreatePinnedToCore(
         PollThreadFunc,
         "thread2",
@@ -77,9 +60,7 @@ void PollThreadFunc(void *pvParameters)
     {
       lights::updateAnimation();
     }
-    //lights::setAnimationMode(lights::AnimationMode::ColorfulIdle);
-     
-     //lights::setAnimationMode(lights::AnimationMode::KeyIndicate);
+
     lights::setAnimationMode(lights::AnimationMode::KeyIndicateFade);
     MIDI::setLogicalLayerEnable(true);
   };
@@ -90,6 +71,7 @@ void PollThreadFunc(void *pvParameters)
      PushEvent(e);
    }
 
+  // THREAD 1 endless loop
   for (;;)
   {
     network::pollEvents();
@@ -97,12 +79,16 @@ void PollThreadFunc(void *pvParameters)
   }
 }
 
+// THREAD 0 endless loop
 void loop()
 {
-  if (errorLock)
+  // If there is an error, show the error code until reset
+  if (isErrorLocked())
   {
-    lights::updateAnimation();
-    goto endLoopLabel;
+    for (;;)
+    {
+      lights::updateAnimation();
+    }
   }
 
   // Poll events
@@ -114,8 +100,7 @@ void loop()
     }
   }
 
- 
- 
+  // call the slow poll 
   unsigned long time;
   time = micros();
   if (time >= poll100Timer + (1000000 / 100))
@@ -123,9 +108,9 @@ void loop()
     poll100Timer = time;
     poll100();
   }
-  lights::updateAnimation();
 
-endLoopLabel:;
+  //  update the animations as often as possible
+  lights::updateAnimation();
 }
 
 void poll100()
@@ -133,60 +118,3 @@ void poll100()
   // Grab the MIDI mutex and update note press events
   MIDI::copyLogicalStateBuffer();
 }
-
-// unsigned int notesChanged = MIDI::pollMIDI();
-// network::pollEvents();
-
-// if (mode == PlayMode::indicate)
-// {
-//     MIDI::NoteEvent *changed = MIDI::getRecentEvents();
-//     for (size_t i = 0; i < notesChanged; i++)
-//     {
-//         lights::setIndicate(changed[i].number, changed[i].state);
-//     }
-// }
-// // First note will not display anything in current state.
-// else if (mode == PlayMode::waiting && notesChanged > 0)
-// {
-//     MIDI::NoteEvent *changed = MIDI::getRecentEvents();
-//     music::songFrame *frame = music::currentFrame();
-
-//     // Case of all notes being pressed correctly
-//     if (music::checkFrameCompletion())
-//     {
-//         byte *note = frame->firstNote;
-//         while (note != frame->lastNote)
-//         {
-//             lights::setFadOut(*note, lights::indicateColorF);
-//             note++;
-//         }
-//         music::nextFrame();
-
-//         // Set all in frame colors to red
-//         // NOTE: WTF happens to notes that are pressed multiple times in a row with the fade out!!??
-//         lights::allOff();
-//         frame = music::currentFrame();
-//         note = frame->firstNote;
-//         while (note != frame->lastNote)
-//         {
-//             lights::setInFrame(*note, false); // This sets keys to indicate
-//             note++;
-//         }
-//     }
-//     // Case of some or none of the notes being pressed correctly
-//     else
-//     {
-//         for (size_t i = 0; i < notesChanged; i++)
-//         {
-//             byte *note = frame->firstNote;
-//             while (note != frame->lastNote)
-//             {
-//                 if (changed[i].number == *note)
-//                 {
-//                     lights::setInFrame(*note, changed[i].state);
-//                 }
-//                 note++;
-//             }
-//         }
-//     }
-// }

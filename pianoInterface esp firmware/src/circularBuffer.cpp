@@ -1,10 +1,10 @@
 #include <Arduino.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 
-#include "circularBuffer.h"
 #include "m_error.h"
+#include "circularBuffer.h"
 
 
 namespace{
@@ -17,16 +17,19 @@ namespace{
     SemaphoreHandle_t xMutex;
 }
 
+// Init the buffer by creating the mutex
 void InitBuffer(){
     xMutex = xSemaphoreCreateMutex();
     ::bufferInit = true;
 }
 
+// How many unhandled events in the que 
 int EventQueLength(){
     assert_fatal(bufferInit, ErrorCode::BUFFER_OVERRUN);
     return eventCount;
 }
 
+// Adds a new event which will be executed on the main thread
 void PushEvent(Event e){
     if(!assert_fatal(bufferInit, ErrorCode::BUFFER_OVERRUN)){
         return;
@@ -52,6 +55,8 @@ void PushEvent(Event e){
 
     xSemaphoreGive(xMutex);
 }
+
+// THREAD 0 ONLY: Takes an event from the event que  
 bool PopEvent(Event * e){
     assert_fatal(bufferInit, ErrorCode::BUFFER_OVERRUN);
 
@@ -75,6 +80,5 @@ bool PopEvent(Event * e){
     }
 
     xSemaphoreGive(xMutex);
-
     return true;
 }

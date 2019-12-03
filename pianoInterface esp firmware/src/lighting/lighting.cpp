@@ -1,10 +1,10 @@
 #include <Arduino.h>
 #include <NeoPixelBus.h>
 
-#include "m_error.h"
 #include "lighting.h"
-#include "music.h"
-#include "pinaoCom.h"
+#include "../m_error.h"
+#include "../music.h"
+#include "../pinaoCom.h"
 #include "color.h"
 
 namespace
