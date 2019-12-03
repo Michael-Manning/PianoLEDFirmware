@@ -4,21 +4,19 @@
 #include <arduino.h>
 #include "m_constants.h"
 
-#define maxSongLength 1000
+#define maxSongLength 5000
 #define maxNoteCount 10000
 
 namespace music
 {
 
-extern byte globalNoteStates[_PIANOSIZE];
+//extern byte globalNoteStates[_PIANOSIZE];
 
-// Get only
-extern unsigned int songLength;
 
 // Get and set
-extern bool looping; // If end is reached, song will always loop
-extern unsigned int loopStart;
-extern unsigned int loopEnd;
+// extern bool looping; // If end is reached, song will always loop
+// extern unsigned int loopStart;
+// extern unsigned int loopEnd;
 
 struct songFrame
 {
@@ -41,9 +39,13 @@ void nextFrame();
 // sets the current frame
 void setFrame(unsigned int index);
 
-bool checkFrameCompletion();
+songFrame currentFrame();
 
-songFrame *currentFrame();
+int currentFrameIndex();
+
+void setLoopingSettings(bool enabled, unsigned int start, unsigned int end);
+
+songFrame Temp(int i);
 
 constexpr unsigned int noteNumberInOctive(unsigned int note)
 {

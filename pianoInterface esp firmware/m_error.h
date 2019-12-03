@@ -19,7 +19,9 @@ enum class ErrorCode{
     SONG_LOAD_DISCONTINUITY = 137, // Error detected in song loading process
     INVALID_SONG_FRAME_INDEX = 138, // Exceded max song length while loaded, or accsess ilegally
     USB_HOST_INITIALISATION = 139, // Could not communicate with the MAX3421E module
-    USB_TIMEOUT = 140
+    USB_TIMEOUT = 140,
+    NULL_SONG_FRAME = 141,
+    INVALID_LOOP_SETTING = 142
 };
 
 bool fatalError(ErrorCode errorCode, bool exec = false);

@@ -3,10 +3,13 @@
 #include <usbhub.h>
 #include <SPI.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+
 #include "pinaoCom.h"
 #include "m_error.h"
-
-//#define MICROBRUTE_DEBUG
+#include "m_constants.h"
 
 /**
  * 
@@ -21,15 +24,38 @@
  * Byte 3: note velocity. This is the only indicator of wether the note was pressed or released.
  */
 
-
 namespace
 {
 USB Usb;
 USBH_MIDI Midi(&Usb);
 bool USBInit = false;
 uint16_t pid, vid;
+SemaphoreHandle_t xMutex; // for copying the logical state buffer
+bool logicalLayerEnabled = false;
 
+// This array contains the states of notes as they are in REAL TIME. This is written to
+// as midi notes are pressed and released. Nothing else should be writing to this. When reading
+// from this array, it can be assumed that these are the true state of what notes are currently being pressed.
 bool noteStates[_PIANOSIZE];
+
+// This array is written to by the MIDI in realtime, but with true values only. That is to say the piano com thread only sets when
+// notes are pressed, but doesn't clear the values when they are released. When the com thread writes to this array, a dirty flag is set.
+// A slow frequency poll from the main thread occasionally coppies this buffer and clears all the values. A mutex is used when this operation
+// is executed.
+bool logicalStateBuffer[_PIANOSIZE];
+
+// This array serves the purpose of replacing the functionality of note pressed events. It is ocasionlly coppied from the logicalStateBuffer 
+// and uses no mutex so it may be read from at any frequency. this is a way of differentiating the diference between
+// multiple note presses and a note just being held down without using a circular event buffer. When a note is pressed, the array
+// is written to and a flag is set. The LED logic layer can then set the note value back off without the note having to be released.
+// This makes subsequint reads from the array apear that the note is not pressed which means that any true value in the array is
+// in effect a note pressed "event". This can only cause errors if a note is pressed more often than the array is polled.
+bool logicalStateLayer[_PIANOSIZE];
+
+#ifdef MICROBRUTE_DEBUG
+char buf[24];
+#endif
+
 } // namespace
 
 namespace MIDI
@@ -41,17 +67,34 @@ bool initUSBHost()
     {
         return false;
     }
+    xMutex = xSemaphoreCreateMutex();
 
-    #ifdef MICROBRUTE_DEBUG
-        Serial.println("USB init success");
-    #endif
-    
+#ifdef MICROBRUTE_DEBUG
+    Serial.println("USB init success");
+#endif
+
     vid = pid = 0;
     USBInit = true;
     return true;
-    
 }
 
+
+// Thread safe copy from the real time logical state buffer to the led managed logical state layer.
+// Copy this a few hundred times per second.
+// THREAD 0
+void copyLogicalStateBuffer(){
+    xSemaphoreTake(xMutex, portMAX_DELAY);
+    memcpy(logicalStateLayer, logicalStateBuffer, sizeof(byte) * _PIANOSIZE);
+    memset(logicalStateBuffer, 0, sizeof(logicalStateBuffer));
+    xSemaphoreGive(xMutex);
+}
+
+// Using the mutex has a performance cost, so it can be disabled when not in use
+void setLogicalLayerEnable(bool enabled){
+    logicalLayerEnabled = enabled;
+}
+
+// THREAD 1
 void pollMIDI()
 {
 
@@ -74,44 +117,89 @@ void pollMIDI()
         vid = Midi.vid;
         pid = Midi.pid;
     }
+    Serial.println("Recieved ");
 
-    #ifdef MICROBRUTE_DEBUG
-    if (Midi.RecvData(&rcvd, midiBuf) == 0)
+#ifdef MICROBRUTE_DEBUG
+    Midi.RecvData(&rcvd, midiBuf);
+    //   if (Midi.RecvData(&rcvd, midiBuf) == 0)
+    //rcvd = Midi.RecvData(midiBuf);
+    //Midi.RecvRawData(midiBuf);
+    if (rcvd != 0)
     {
-
-        if (midiBuf[2] != 0)
+        if (midiBuf[0] != 15)
         {
             bool state = midiBuf[0] == 9;
             byte noteNumber = midiBuf[2] - noteNumberOffset;
-            if(noteNumber > 52){
+            if (noteNumber > 52)
+            {
                 noteNumber = 52;
             }
             noteStates[noteNumber] = state;
 
-                #ifdef MICROBRUTE_DEBUG
-        Serial.println("note pressed");
-    #endif
+            //Serial.print("Rec3333d ");
+            Serial.print("Recieved ");
+            Serial.print(rcvd);
+            Serial.print(" : ");
+            for (int i = 0; i < rcvd; i++)
+            {
+                sprintf(buf, " %d", midiBuf[i]);
+                Serial.print(buf);
+            }
+            Serial.println("");
         }
     }
 
 #else
     //if (assert_fatal(Midi.RecvData(&rcvd, midiBuf) == 0, ErrorCode::USB_TIMEOUT))
-    if (Midi.RecvData( &rcvd,  midiBuf) == 0 )
+    Midi.RecvData(&rcvd, midiBuf);
+    //if (Midi.RecvData(&rcvd, midiBuf) == 0)
+    if(rcvd != 0)
     {
-        // If there was a note change
-        if(midiBuf[0] == 9){
-            // For now, velocity is ignored and just used to get the note state.
-            bool state = midiBuf[3] != 0;
-            byte noteNumber = midiBuf[2] - noteNumberOffset;
-            noteStates[noteNumber] = state;
+        //Serial.print("Recieved ");
+        //Serial.print(rcvd);
+        //Serial.print(" : ");
+        // for (int i = 0; i < rcvd; i++)
+        // {
+        //     sprintf(buf, " %d", midiBuf[i]);
+        //     Serial.print(buf);
+        // }
+        // Serial.println("");
+
+        if(logicalLayerEnabled){
+            xSemaphoreTake(xMutex, portMAX_DELAY);
+        }
+        for (size_t i = 0; i < 64 / 4; i+= 4)
+        {
+            if (midiBuf[i] == 9)
+            {
+                // For now, velocity is ignored and just used to get the note state.
+                bool state = midiBuf[i + 3] != 0;
+                byte noteNumber = midiBuf[i+2] - noteNumberOffset;
+                noteStates[noteNumber] = state;
+                if (logicalLayerEnabled)
+                {
+                    logicalStateBuffer[noteNumber] |= state;
+                }
+            }
+        }
+        if(logicalLayerEnabled){
+            xSemaphoreGive(xMutex);
         }
     }
-    #endif
+#endif
 }
 
 bool getNoteState(byte noteNumber)
 {
     return noteStates[noteNumber];
+}
+
+// THREAD 0 
+bool getLogicalState(byte noteNumber)
+{
+    bool val = logicalStateLayer[noteNumber];
+    logicalStateLayer[noteNumber] = 0; // reset to simulate event logic
+    return val;
 }
 
 } // namespace MIDI

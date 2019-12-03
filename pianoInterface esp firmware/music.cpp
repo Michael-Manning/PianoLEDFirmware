@@ -1,59 +1,68 @@
 #include <Arduino.h>
-//#include "M_Assert.h"
+#include "m_error.h"
+#include "m_constants.h"
 #include "music.h"
+#include "circularBuffer.h"
 
 //#include "pinaoCom.h"
 
 namespace
 {
 music::songFrame frameData[maxSongLength];
+byte noteData[maxNoteCount];
+
 unsigned int frameLoaderIndex = 0;
-unsigned int frameLoaderNoteIndex = 0;
-unsigned int liveFrameIndex;
+unsigned int liveFrameIndex = 0;
+unsigned int notesLoaded = 0;
+
+bool looping = false;
+unsigned int loopStart = 0;
+unsigned int loopEnd = 0;
 } // namespace
 
 namespace music
 {
-//Extern
-byte noteData[maxNoteCount];
-unsigned int songLength = 0;
-bool looping = false;
-unsigned int loopStart = 0;
-unsigned int loopEnd = 0;
 
 void resetSongLoader()
 {
     frameLoaderIndex = 0;
-    songLength = 0;
+    notesLoaded = 0;
+}
+
+songFrame Temp(int i){
+    //frameData[i] = {noteData, noteData};
+    return frameData[i];
 }
 
 void loadFrame(byte *notes, byte noteCount)
 {
-    memcpy(noteData, notes, noteCount);
-    frameData[frameLoaderIndex] = {noteData + frameLoaderIndex, noteData + frameLoaderNoteIndex + noteCount};
+    memcpy(noteData + notesLoaded, notes, noteCount);
+    frameData[frameLoaderIndex] = {noteData + notesLoaded, noteData + notesLoaded + noteCount -1};
     frameLoaderIndex++;
-    frameLoaderNoteIndex += noteCount;
-    songLength++;
+    notesLoaded+= noteCount;
 }
 
 bool getFrame(unsigned int frameIndex, songFrame *frame)
 {
-    if (frameIndex >= songLength)
+    if(!assert_fatal(frameIndex < notesLoaded, ErrorCode::INVALID_SONG_FRAME_INDEX))
     {
- //       assert(false);
         return false;
     }
 
-    frame = frameData + frameIndex;
-    return true;
+    *frame = frameData[frameIndex];
+    return assert_fatal(frame != nullptr, ErrorCode::NULL_SONG_FRAME);
 }
 
-songFrame *currentFrame()
+songFrame currentFrame()
 {
-    songFrame *frame;
-    getFrame(liveFrameIndex, frame);
+    songFrame frame;
+    getFrame(liveFrameIndex, &frame);
+    return frame;
 }
-
+int currentFrameIndex()
+{
+    return liveFrameIndex;
+}
 void nextFrame()
 {
     setFrame(liveFrameIndex + 1);
@@ -64,29 +73,34 @@ void setFrame(unsigned int index)
     liveFrameIndex = index;
     if (looping)
     {
-        if (liveFrameIndex >= loopEnd || liveFrameIndex > songLength)
+        if (liveFrameIndex >= loopEnd)
         {
             liveFrameIndex = loopStart;
-            return;
+        }
+        else if(liveFrameIndex < loopStart){
+            liveFrameIndex = loopStart;
         }
     }
-    if (liveFrameIndex > songLength)
+    if (liveFrameIndex >= notesLoaded)
     {
         liveFrameIndex = 0;
     }
 }
 
-bool checkFrameCompletion()
-{
-    // songFrame *frame = currentFrame();
-    // byte *note = frame->firstNote;
-    // while (note != frame->lastNote)
-    // {
-    //     if(!MIDI::getNoteState(*note))
-    //         return false;
-    //     note ++;
-    // }
-    return true;
+
+void setLoopingSettings(bool enabled, unsigned int start, unsigned int end){
+    if (start >= end || end > frameLoaderIndex)
+    {
+        fatalError(ErrorCode::INVALID_LOOP_SETTING);
+    }
+    
+    looping = enabled;
+    loopStart = start;
+    loopEnd = end;
+
+    // set the frame to the current frame to check if the current frame
+    // is now out of looping range
+    setFrame(liveFrameIndex);
 }
 
 } // namespace music

@@ -5,45 +5,53 @@
 #include "lighting.h"
 #include "music.h"
 #include "pinaoCom.h"
+#include "color.h"
 
 namespace
 {
+
+////////////////////////////////////////// ANIMATION SETTINGS
+constexpr float indicateFadeTime = 0.6f; // seconds
+constexpr float inFrameFadeTime = 0.26f; // seconds
+
+//////////////////////////////////////////
+
 color colors[_KEYCOUNT];
 colorF colorsF[_KEYCOUNT];
 
-enum class PixelState
-{
-    indicate,
-    inFrame,
-    fading
-};
-
-PixelState pixelStates[_KEYCOUNT];
+float keyTimers[_KEYCOUNT]; // general use per-key timers for animations
+colorF keyFadeTargets[_KEYCOUNT]; // general use colorLayer
 
 bool stripDirty = true;
 bool showErrorCode = false; // Display the error code on top of everything else;
 byte errorCode = 0;
 float animationStartTime = 0;
 bool animationComplete = false; // Not all animations have an end
+bool animationFirstFrame = false;
 float progressBarValue = 0.0f;
+bool fullRefresh = false; // general use flag (mostly for waiting animation)
 constexpr float HSLRange_Over_KeyCount = 1530.0f / (float)_KEYCOUNT;
-
-constexpr colorF colorToColorF(color c)
-{
-    return {(float)c.r / 255.0f, (float)c.g / 255.0f, (float)c.b / 255.0f};
-}
-constexpr color colorFToColor(colorF c)
-{
-    return {static_cast<byte>(c.r * 255), static_cast<byte>(c.g * 255), static_cast<byte>(c.b * 255)};
-}
 
 constexpr colorF indicateColorF = colorToColorF(lights::indicateColor);
 constexpr colorF inFramecolorF = colorToColorF(lights::inFrameColor);
 
 lights::AnimationMode animationMode = lights::AnimationMode::None;
+
+////////////////////////////////////////// song learner stuff
+bool pressedThisFrame[_KEYCOUNT]; // keeps track of notes that have been pressed this frame (not just held down from the last frame)
+
 } // namespace
 
 NeoPixelBus<NeoGrbwFeature, Neo800KbpsMethod> strip(_KEYCOUNT, _PIXELPIN);
+
+constexpr colorF mix(colorF A, colorF B, float t)
+{
+    return {
+        (1.0f - t) * A.r + t * B.r,
+        (1.0f - t) * A.g + t * B.g,
+        (1.0f - t) * A.b + t * B.b
+        };
+}
 
 inline void setColor(byte led, uint8_t r, uint8_t g, uint8_t b)
 {
@@ -77,27 +85,35 @@ inline void setAll(colorF c)
 }
 
 // Index between 0 - 1530
-color sweepHSL(unsigned int index){
+color sweepHSL(unsigned int index)
+{
 
-    if(!assert_fatal(index <= 1530, ErrorCode::INVALID_LED_INDEX)){
-         return {255, 255, 255};
+    if (!assert_fatal(index <= 1530, ErrorCode::INVALID_LED_INDEX))
+    {
+        return {255, 255, 255};
     }
-    if(index <= 255 * 1){
+    if (index <= 255 * 1)
+    {
         return {255, index, 0};
     }
-    else if(index <= 255 * 2){
+    else if (index <= 255 * 2)
+    {
         return {255 - (byte)(index - 255), 255, 0};
     }
-    else if(index <= 255 * 3){
+    else if (index <= 255 * 3)
+    {
         return {0, 255, (byte)(index - 255 * 2)};
     }
-    else if(index <= 255 * 4){
+    else if (index <= 255 * 4)
+    {
         return {0, 255 - (index - 255 * 3), 255};
     }
-    else if(index <= 255 * 5){
+    else if (index <= 255 * 5)
+    {
         return {index - 255 * 4, 0, 255};
     }
-    else if(index <= 255 * 6){
+    else if (index <= 255 * 6)
+    {
         return {255, 0, 255 - (index - 255 * 5)};
     }
     fatalError(ErrorCode::IMPOSSIBLE_INTERNAL);
@@ -111,16 +127,17 @@ namespace lights
 
 namespace AnimationParameters
 {
-    void setProgressBarValue(float value){
-        progressBarValue = value;
-    }
+void setProgressBarValue(float value)
+{
+    progressBarValue = value;
 }
+} // namespace AnimationParameters
 
 void allOff()
 {
     for (size_t pix = 0; pix < _KEYCOUNT; pix++)
     {
-        setColor(pix, 0, 0, 0);
+        setColor(pix, colorF{0, 0, 0});
     }
     // strip.Show();
 }
@@ -143,46 +160,46 @@ void init()
             setColor(pix, i, 0, 0);
             updateLEDS();
         }
-        pixelStates[0] = PixelState::indicate;
+       // pixelStates[0] = PixelState::indicate;
     }
 }
 
-void setIndicate(uint8_t key, bool state)
-{
-    assert_fatal(key < _KEYCOUNT, ErrorCode::INVALID_LED_INDEX);
-    if (state)
-    {
-        colors[key] = indicateColor;
-        colorsF[key] = indicateColorF;
-        stripDirty = pixelStates[key] != PixelState::indicate;
-        pixelStates[key] = PixelState::indicate;
-    }
-    else if (pixelStates[key] == PixelState::indicate)
-    {
-        colors[key] = noColor;
-        colorsF[key] = noColor;
-        stripDirty = true;
-    }
-}
+// void setIndicate(uint8_t key, bool state)
+// {
+//     assert_fatal(key < _KEYCOUNT, ErrorCode::INVALID_LED_INDEX);
+//     if (state)
+//     {
+//         colors[key] = indicateColor;
+//         colorsF[key] = indicateColorF;
+//         stripDirty = pixelStates[key] != PixelState::indicate;
+//         pixelStates[key] = PixelState::indicate;
+//     }
+//     else if (pixelStates[key] == PixelState::indicate)
+//     {
+//         colors[key] = noColor;
+//         colorsF[key] = noColor;
+//         stripDirty = true;
+//     }
+// }
 
-void setInFrame(byte key, bool state)
-{
-    assert_fatal(key < _KEYCOUNT, ErrorCode::INVALID_LED_INDEX);
-    if (state)
-    {
-        colors[key] = inFrameColor;
-        colorsF[key] = inFramecolorF;
-        stripDirty = pixelStates[key] != PixelState::inFrame;
-        pixelStates[key] = PixelState::inFrame;
-    }
-    else
-    {
-        colors[key] = indicateColor;
-        colorsF[key] = indicateColorF;
-        stripDirty = true;
-        pixelStates[key] = PixelState::indicate;
-    }
-}
+// void setInFrame(byte key, bool state)
+// {
+//     assert_fatal(key < _KEYCOUNT, ErrorCode::INVALID_LED_INDEX);
+//     if (state)
+//     {
+//         colors[key] = inFrameColor;
+//         colorsF[key] = inFramecolorF;
+//         stripDirty = pixelStates[key] != PixelState::inFrame;
+//         pixelStates[key] = PixelState::inFrame;
+//     }
+//     else
+//     {
+//         colors[key] = indicateColor;
+//         colorsF[key] = indicateColorF;
+//         stripDirty = true;
+//         pixelStates[key] = PixelState::indicate;
+//     }
+// }
 
 void updateLEDS()
 {
@@ -211,10 +228,18 @@ void updateLEDS()
 void setAnimationMode(AnimationMode mode)
 {
     animationMode = mode;
-    animationStartTime = millis() / 1000.0f;
+    animationFirstFrame = true;
+    animationStartTime = micros() / 1000000.0f;
     animationComplete = false;
+    memset(keyTimers, 0, sizeof(keyTimers));
+    allOff();
 }
 
+void forceRefresh(){
+    fullRefresh = true;
+}
+
+float lastTime = 0;
 void updateAnimation()
 {
     if (animationComplete)
@@ -222,7 +247,9 @@ void updateAnimation()
         return;
     }
 
-    float time = millis() / 1000.0f - animationStartTime;
+    const float time = (float)micros() / 1000000.0f - animationStartTime;
+    const float deltaTime = time - lastTime;
+    lastTime = time;
 
     switch (animationMode)
     {
@@ -231,7 +258,7 @@ void updateAnimation()
         float brightness = sin((float)time * 2.0f) * 0.5f + 0.5f;
         setAll({brightness, 0.0f, 0.0f});
     }
-        break;
+    break;
     case AnimationMode::BlinkSuccess:
     {
         float brightness = sin((float)time * 20.0f) * 0.5f + 0.5f;
@@ -243,60 +270,198 @@ void updateAnimation()
             allIdle();
         }
     }
-        break;
+    break;
     case AnimationMode::ColorfulIdle:
     {
         for (unsigned int i = 0; i < _KEYCOUNT; i++)
         {
             float index = i * HSLRange_Over_KeyCount + time * 1000;
-            while(index > 1530){
+            while (index > 1530)
+            {
                 index -= 1530;
             }
             setColor(i, sweepHSL((unsigned int)(index)));
         }
     }
-        break;
+    break;
     case AnimationMode::ProgressBar:
     {
         float filledInKeys = _KEYCOUNT * progressBarValue;
         for (size_t i = 0; i < _KEYCOUNT; i++)
         {
             // full On
-            if(i <= filledInKeys){
-                setColor(i, Colors::Red);
+            if (i <= filledInKeys)
+            {
+                setColor(_KEYCOUNT - i - 1, Colors::Red);
             }
             // Partially lit
-            else if(i < filledInKeys +1){
+            else if (i < filledInKeys + 1)
+            {
                 float opacity = filledInKeys - i;
-                setColor(i, colorF{opacity, 0.0f, 0.0f});
+                setColor(_KEYCOUNT - i - 1, colorF{opacity, 0.0f, 0.0f});
             }
             // Off
-            else{
-                setColor(i, Colors::Off);
+            else
+            {
+                setColor(_KEYCOUNT - i - 1, Colors::Off);
             }
         }
     }
-        break;
+    break;
     case AnimationMode::KeyIndicate:
     {
         for (size_t i = 0; i < _KEYCOUNT; i++)
         {
             bool state = MIDI::getNoteState(i + MIDI::ledNoteOffset);
-            if(state){
-                setColor(_KEYCOUNT - 1 - i, indicateColor);
+            if (state)
+            {
+                if (music::isBlackNote(i + MIDI::ledNoteOffset))
+                {
+                    setColor(_KEYCOUNT - 1 - i, Colors::Blue);
+                }
+                else
+                {
+                    setColor(_KEYCOUNT - 1 - i, indicateColor);
+                }
             }
-            else if(!music::isBlackNote(i)){
+            else if (!music::isBlackNote(i + MIDI::ledNoteOffset))
+            {
                 setColor(_KEYCOUNT - 1 - i, ambiantColor);
             }
-            else{
+            else
+            {
                 setColor(_KEYCOUNT - 1 - i, Colors::Off);
             }
         }
     }
-        break;
+    break;
+    case AnimationMode::KeyIndicateFade:
+    {
+        for (size_t i = 0; i < _KEYCOUNT; i++)
+        {
+            // Note event: reset the timer
+            if (MIDI::getLogicalState(i + MIDI::ledNoteOffset))
+            {
+                keyTimers[i] = indicateFadeTime;
+            }
+
+            if (music::isBlackNote(i + MIDI::ledNoteOffset))
+            {
+                setColor(_KEYCOUNT - 1 - i, Colors::Blue * ((float)keyTimers[i] / indicateFadeTime));
+            }
+            else
+            {
+                colorF col = Colors::Red * ((float)keyTimers[i] / indicateFadeTime);
+                col = colorMax(col, ambiantColor);
+                setColor(_KEYCOUNT - 1 - i, col);
+            }
+            keyTimers[i] -= deltaTime;
+            if (keyTimers[i] < 0)
+            {
+                keyTimers[i] = 0;
+            }
+        }
+    }
+    break;
+    case AnimationMode::Waiting:
+    {
+
+        // ADD GLOBAL ANIMATION INIT BOLLEAN
+
+        // update notes pressed down during this frame
+        for (size_t i = 0; i < _KEYCOUNT; i++)
+        {
+            if(MIDI::getLogicalState(i + MIDI::ledNoteOffset)){
+                pressedThisFrame[i] = true;
+            }
+        }
+
+
+        allOff();
+
+        using namespace music;
+        songFrame frame = currentFrame();
+
+
+        bool allInFrame = true;
+    
+        byte *notes = frame.firstNote;
+
+
+        unsigned int index = 0;
+        while (true)
+        {
+            unsigned int keyIndex = (notes[index] - MIDI::ledNoteOffset);
+            if (notes[index] >= MIDI::ledNoteOffset && notes[index] < _KEYCOUNT + MIDI::ledNoteOffset)
+            {
+                keyFadeTargets[keyIndex] = Colors::Red;
+                if (pressedThisFrame[notes[index] - MIDI::ledNoteOffset] && MIDI::getNoteState(notes[index]))
+                {
+                    keyTimers[keyIndex] = inFrameFadeTime;
+                   // setColor(_KEYCOUNT - 1 - (notes[index] - MIDI::ledNoteOffset), Colors::Red);
+                }
+                else
+                {
+                    allInFrame = false;
+                }
+            }
+            if (notes[index] == *frame.lastNote)
+            {
+                break;
+            }
+            index++;
+        }
+
+        if (allInFrame)
+        {
+          //memset(pressedThisFrame, false, sizeof(pressedThisFrame));
+          nextFrame();
+        }
+        if(allInFrame || animationFirstFrame || fullRefresh)
+        {
+            for (size_t i = 0; i < _KEYCOUNT; i++)
+            {
+                pressedThisFrame[i] = false;
+
+                if (music::isBlackNote(i + MIDI::ledNoteOffset))
+                {
+                    keyFadeTargets[i] = Colors::Off;
+                }
+                else
+                {
+                    keyFadeTargets[i] = ambiantColor;
+                }
+            }
+        }
+
+        // colors
+        for (size_t i = 0; i < _KEYCOUNT; i++)
+        {
+            // setColor(_KEYCOUNT - 1 - i, keyFadeTargets[i]);
+            if (keyTimers[i] == 0)
+            {
+                setColor(_KEYCOUNT - 1 - i, keyFadeTargets[i]);
+            }
+            else
+            {
+                float t =  ((float)keyTimers[i] / inFrameFadeTime);
+                colorF col = mix(Colors::Green, keyFadeTargets[i], 1.0f - t);
+                setColor(_KEYCOUNT - 1 - i, col);
+            }
+            keyTimers[i] -= deltaTime;
+            if (keyTimers[i] < 0)
+            {
+                keyTimers[i] = 0;
+            }
+        }
+    }
+    break;
+
     default:
         break;
     }
+    animationFirstFrame = false;
+    fullRefresh = false;
     updateLEDS();
 }
 
@@ -316,12 +481,12 @@ bool animationCompleted()
     return animationComplete;
 }
 
-void displayFrame(music::songFrame frame){
+void displayFrame(music::songFrame frame)
+{
     for (size_t i = 0; i < _KEYCOUNT; i++)
     {
         //if(frame.firstnote)
     }
-    
 }
 
 } // namespace lights

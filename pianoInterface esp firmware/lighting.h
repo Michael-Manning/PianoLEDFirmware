@@ -4,6 +4,7 @@
 //#include "constants.h"
 #include "m_constants.h"
 #include "music.h"
+#include "color.h"
 
 #ifndef _KEYCOUNT
 #define _KEYCOUNT 53
@@ -20,15 +21,6 @@
  * a song being loaded in or a setting being changed successfully
  */
 
-struct color
-{
-    byte r, g, b;
-};
-
-struct colorF
-{
-    float r, g, b;
-};
 
 //color operator+(color &a, color &b) { return {a.r + b.r, a.g + b.g, a.b + b.b};};
 
@@ -51,6 +43,8 @@ enum class AnimationMode{
     ColorfulIdle,
     ProgressBar,
     KeyIndicate,
+    KeyIndicateFade,
+    Waiting, // (Learning Mode)
     None
 };
 
@@ -80,6 +74,7 @@ void setFadOut(uint8_t key, colorF col);
 void allOff();
 void init();
 void updateLEDS();
+void forceRefresh();
 };
 
 #endif
