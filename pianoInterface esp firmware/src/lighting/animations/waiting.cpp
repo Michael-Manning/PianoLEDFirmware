@@ -20,8 +20,6 @@ namespace animations
 
 void waiting(float deltaTime, bool firstFrame, bool fullRefresh)
 {
-    // ADD GLOBAL ANIMATION INIT BOLLEAN
-
     // update notes pressed down during this frame
     for (size_t i = 0; i < _KEYCOUNT; i++)
     {

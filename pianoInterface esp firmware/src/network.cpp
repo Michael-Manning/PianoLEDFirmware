@@ -29,6 +29,7 @@
  *      8 = get live frame index
  *      9 = restore default settings
  *      10 = get setting
+ *      11 = change animation mode
  * 
  * ------------------------------
  * 
@@ -88,6 +89,17 @@
  * 
  * restore default settings:
  * none 
+ * 
+ * -------- 10
+ * 
+ * get setting:
+ * byte 2 setting number
+ * 
+ * 
+ * -------- 11
+ * 
+ * change animation mode:
+ * byte 2 animation number
  */
 
 namespace
@@ -111,6 +123,16 @@ uint16_t concatBytes(uint8_t A, uint8_t B)
     combined = combined << 8;
     combined |= B;
     return combined;
+}
+
+void formattedClientReply(char *fmt, ...){
+    char buff[128];
+    va_list va;
+    va_start (va, fmt);
+    vsprintf (buff, fmt, va);
+    va_end (va);
+    sprintf(buff, "%s", buff);
+    client.print(buff);
 }
 
 } // namespace
@@ -443,7 +465,8 @@ void pollEvents()
         }
         else
         {
-            client.print("Status: OK");
+            formattedClientReply("OK TEST %d", 1235);
+            //client.print("Status: OK");
         }
     }
     break;
@@ -479,6 +502,25 @@ void pollEvents()
             sprintf(buffer, "OK:%d,%d,%d", col.r, col.b, col.b);
             client.print(buffer);
         }
+    }
+    break;
+    // Get setting
+    case 11:
+    {
+        // if(messageBuffer[1] > 7)
+        // {
+        //     fatalError(ErrorCode::INVALID_SETTING);
+        //     client.print("ER:Invalid setting");
+        //     client.stop();
+        //     return;
+        // }
+
+        // color col = settings::getColorSetting(static_cast<unsigned int>(messageBuffer[1]));
+        // {
+        //     char buffer[128];
+        //     sprintf(buffer, "OK:%d,%d,%d", col.r, col.b, col.b);
+        //     client.print(buffer);
+        // }
     }
     break;
     default:
