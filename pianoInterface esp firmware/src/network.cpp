@@ -3,11 +3,13 @@
 
 #include "circularBuffer.h"
 #include "lighting/lighting.h"
+#include "lighting/color.h"
 #include "m_constants.h"
 #include "m_error.h"
 #include "music.h"
 #include "pinaoCom.h"
 #include "network.h"
+#include "settings.h"
 
 /**
  * PROTOCOL SPECIFICATION:
@@ -17,7 +19,7 @@
  * byte 1: message type
  * 
  * message type: 
- *      1 = unused
+ *      1 = change setting
  *      2 = update loop setting
  *      3 = begin loading song
  *      4 = song data
@@ -25,13 +27,19 @@
  *      6 = set song index
  *      7 = get status
  *      8 = get live frame index
+ *      9 = restore default settings
+ *      10 = get setting
  * 
  * ------------------------------
  * 
  * -------- 1
  * 
- * unused:
- * none
+ * change setting:
+ * byte 2: setting number
+ * byte 3: data
+ * byte 4: data
+ * byte 5: data
+ * byte 6: data
  * 
  * -------- 2
  * 
@@ -74,6 +82,11 @@
  * -------- 8
  * 
  * get live frame index:
+ * none 
+ * 
+ * -------- 9
+ * 
+ * restore default settings:
  * none 
  */
 
@@ -216,11 +229,19 @@ void pollEvents()
 
     switch (messageBuffer[0])
     {
-    // change mode
+    // change setting
     case 1:
     {
-        fatalError(ErrorCode::NOT_IMPLIMENTED);
-        return;
+        if(messageBuffer[1] > 7)
+        {
+            fatalError(ErrorCode::INVALID_SETTING);
+            client.print("ER:Invalid setting");
+            client.stop();
+            return;
+        }
+
+        settings::saveColorSetting(static_cast<unsigned int>(messageBuffer[1]), {messageBuffer[2], messageBuffer[3], messageBuffer[4]});
+        client.print("OK: setting updated");
     }
     break;
     // update loop setting
@@ -411,6 +432,7 @@ void pollEvents()
         PushEvent(e);
     }
     break;
+    // get status
     case 7:
     {
         if (isErrorLocked())
@@ -425,11 +447,38 @@ void pollEvents()
         }
     }
     break;
+    // get current frame index
     case 8:
     {
         char buffer[128];
         sprintf(buffer, "OK:%d", music::currentFrameIndex());
         client.print(buffer);
+    }
+    break;
+    // restore default settings
+    case 9:
+    {   
+        settings::restoreDefaults();
+        client.print("OK: Default settings restored");
+    }
+    break;
+    // Get setting
+    case 10:
+    {
+        if(messageBuffer[1] > 7)
+        {
+            fatalError(ErrorCode::INVALID_SETTING);
+            client.print("ER:Invalid setting");
+            client.stop();
+            return;
+        }
+
+        color col = settings::getColorSetting(static_cast<unsigned int>(messageBuffer[1]));
+        {
+            char buffer[128];
+            sprintf(buffer, "OK:%d,%d,%d", col.r, col.b, col.b);
+            client.print(buffer);
+        }
     }
     break;
     default:

@@ -11,6 +11,7 @@
 #include "src/music.h"
 #include "src/network.h"
 #include "src/pinaoCom.h"
+#include "src/settings.h"
 
 TaskHandle_t taskA;
 void PollThreadFunc(void *pvParameters);
@@ -24,11 +25,22 @@ void setup()
 {
   Serial.begin(115200);
 
+  settings::init();
+  //settings::restoreDefaults();
+  settings::loadSettings();
+  settings::dumpToSerial();
+
   // Assuiming the USB shield is connected, there's no reason this should fail.
   bool USBSuccess = MIDI::initUSBHost();
 
   // Connect to strip and display the startup animation
   lights::init();
+  lights::setAnimationMode(lights::AnimationMode::Startup);
+  while (!lights::animationCompleted())
+  {
+    lights::updateAnimation();
+  }
+
   lights::setAnimationMode(lights::AnimationMode::ColorfulIdle);
   InitBuffer();
 

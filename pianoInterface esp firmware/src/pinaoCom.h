@@ -1,6 +1,8 @@
 #ifndef PIANOCOM_H
 #define PIANOCOM_H
 
+#include <stdint.h>
+
 #include "m_constants.h"
 
 /**
@@ -12,16 +14,16 @@
 namespace MIDI
 {
 
-constexpr byte noteNumberOffset = 21; // MIDI note number for the first note
-constexpr byte ledNoteOffset = 15 ; // First note on the piano which has an LED 
+constexpr uint8_t noteNumberOffset = 21; // MIDI note number for the first note
+constexpr uint8_t ledNoteOffset = 15 ; // First note on the piano which has an LED 
 
 bool initUSBHost();
 
 void pollMIDI(); 
 
-bool getNoteState(byte noteNumber); 
+bool getNoteState(uint8_t noteNumber); 
 
-bool getLogicalState(byte noteNumber);
+bool getLogicalState(uint8_t noteNumber);
 
 void copyLogicalStateBuffer();
 

@@ -40,6 +40,16 @@ colorF colorMin(const colorF &a, float b);
 colorF colorMax(const colorF &a, const colorF &b); 
 colorF colorMax(const colorF &a, float b); 
 
+// Quick colors
+namespace Colors{
+    constexpr color Off = {0, 0, 0};
+    constexpr color Red = {255, 0, 0};
+    constexpr color Blue = {0, 0, 255};
+    constexpr color Green = {0, 255, 0};
+    constexpr color Purple = {0, 255, 255};
+    constexpr color White = {255, 255, 255};
+}
+
 bool operator == (color &a, color &b);
 bool operator != (color &a, color &b);
 

@@ -1,1 +1,5 @@
 Add a way to flag the network as busy so MIDI is never polled while a song is being loaded
+
+Generate an 8 bit sin table
+
+Generate an HSL angle table
