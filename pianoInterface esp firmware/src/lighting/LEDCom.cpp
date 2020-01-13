@@ -24,41 +24,25 @@ void stripInit()
 {
     strip.Begin();
     strip.Show();
-
-    // Show initialization animation
-    for (size_t pix = 0; pix < _KEYCOUNT; pix++)
-    {
-        for (size_t i = 0; i < 255; i += 30)
-        {
-            setColor(pix, i, 0, 0);
-            updateLEDS();
-        }
-        // pixelStates[0] = PixelState::indicate;
-    }
 }
 
 void setColor(uint8_t led, uint8_t r, uint8_t g, uint8_t b)
 {
-    //strip.SetPixelColor(led, RgbColor(r, g, b));
     colors[led] = {r, g, b};
     colorsF[led] = colorToColorF({r, g, b});
     stripDirty = true;
 }
 
-void setColor(uint8_t led, color c)
-{
-    //strip.SetPixelColor(led, RgbColor(r, g, b));
-    colors[led] = c;
-    colorsF[led] = colorToColorF(c);
-    stripDirty = true;
-}
-
 void setColor(uint8_t led, colorF c)
 {
-    //strip.SetPixelColor(led, RgbColor(r, g, b));
     colors[led] = colorFToColor(c);
     colorsF[led] = c;
     stripDirty = true;
+}
+
+colorF getColor(uint8_t led)
+{
+    return colorsF[led];
 }
 
 void setAll(colorF c)

@@ -13,13 +13,24 @@ using namespace animator;
 namespace
 {
     constexpr float indicateFadeTime = 0.6f; // seconds
+    colorF memes[_KEYCOUNT];
 }
 
 namespace animations
 {
 
-void keyIndicateFade(const float deltaTime)
+void rainbowFade(const float deltaTime, const float time)
 {
+    for (unsigned int i = 0; i < _KEYCOUNT; i++)
+    {
+        float index = i * HSLRange_Over_KeyCount + time * 1000;
+        while (index > 1530)
+        {
+            index -= 1530;
+        }
+        memes[i] = sweepHSL((unsigned int)(index));
+    }
+     
     for (size_t i = 0; i < _KEYCOUNT; i++)
     {
         // Note event: reset the timer
@@ -28,16 +39,16 @@ void keyIndicateFade(const float deltaTime)
             keyTimers[i] = indicateFadeTime;
         }
 
-        if (music::isBlackNote(i + MIDI::ledNoteOffset))
+
+        colorF col = col = memes[i] * ((float)keyTimers[i] / indicateFadeTime);
+
+        if (!music::isBlackNote(i + MIDI::ledNoteOffset))
         {
-            setColor(_KEYCOUNT - 1 - i, settings::getColorSetting(settings::Colors::IndicateBlack) * ((float)keyTimers[i] / indicateFadeTime));
-        }
-        else
-        {
-            colorF col = settings::getColorSetting(settings::Colors::IndicateWhite) * ((float)keyTimers[i] / indicateFadeTime);
             col = colorMax(col, settings::getColorSetting(settings::Colors::Ambiant));
-            setColor(_KEYCOUNT - 1 - i, col);
         }
+
+        setColor(_KEYCOUNT - 1 - i, col);
+
         keyTimers[i] -= deltaTime;
         if (keyTimers[i] < 0.0f)
         {

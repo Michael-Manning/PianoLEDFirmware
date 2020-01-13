@@ -13,14 +13,15 @@ namespace lights
 enum class AnimationMode{
     Startup,
     PulseError,
-    PulseColor,
     BlinkSuccess,
     ColorfulIdle,
     ProgressBar,
     KeyIndicate,
     KeyIndicateFade,
     Waiting, // (Learning Mode)
-    None
+    None,
+    Ambiant,
+    Wave
 };
 
 namespace AnimationParameters

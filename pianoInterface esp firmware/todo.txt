@@ -3,3 +3,7 @@ Add a way to flag the network as busy so MIDI is never polled while a song is be
 Generate an 8 bit sin table
 
 Generate an HSL angle table
+
+add velocity threshold setting
+
+Make the ambiant "animation" only light up white keys

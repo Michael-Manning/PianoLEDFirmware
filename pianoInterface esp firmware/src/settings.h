@@ -20,7 +20,8 @@ constexpr unsigned int colorSettingCount = 7;
 
 enum class Floats
 {
-    IndicateFadeTime = 0
+    IndicateFadeTime = 0,
+    VelocityThreshold = 1
 };
 constexpr unsigned int floatSettingCount = 1;
 
@@ -29,6 +30,8 @@ void init();
 void restoreDefaults();
 
 void loadSettings();
+
+void commitSettings();
 
 void saveColorSetting(settings::Colors setting, color value);
 void saveColorSetting(unsigned int setting, color value);

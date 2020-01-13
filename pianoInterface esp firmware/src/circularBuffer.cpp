@@ -56,6 +56,12 @@ void PushEvent(Event e){
     xSemaphoreGive(xMutex);
 }
 
+void PushEvent(void (*Action)()){
+    Event e;
+    e.action = Action;
+    PushEvent(e);
+}
+
 // THREAD 0 ONLY: Takes an event from the event que  
 bool PopEvent(Event * e){
     assert_fatal(bufferInit, ErrorCode::BUFFER_OVERRUN);

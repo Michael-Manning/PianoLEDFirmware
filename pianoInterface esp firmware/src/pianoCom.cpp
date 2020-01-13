@@ -196,5 +196,9 @@ void copyLogicalStateBuffer(){
 void setLogicalLayerEnable(bool enabled){
     logicalLayerEnabled = enabled;
 }
+bool getLogicalLayerEnabled()
+{
+    return logicalLayerEnabled;
+}
 
 } // namespace MIDI

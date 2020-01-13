@@ -13,7 +13,7 @@ namespace animations
 
 void startUp(const float time)
 {
-    float filledInKeys = _KEYCOUNT * (time / 2.0f);
+    float filledInKeys = _KEYCOUNT * (time / 1.0f);
     for (size_t i = 0; i < _KEYCOUNT; i++)
     {
         // full On
@@ -22,11 +22,11 @@ void startUp(const float time)
             setColor(i, Colors::Red);
         }
         // Partially lit
-        else if (i < filledInKeys + 1)
-        {
-            float opacity = filledInKeys - i;
-            setColor(i, colorF{opacity, 0.0f, 0.0f});
-        }
+        // else if (i < filledInKeys + 1)
+        // {
+        //     float opacity = filledInKeys - i;
+        //     setColor(i, colorF{opacity, 0.0f, 0.0f});
+        // }
         // Off
         else
         {
@@ -34,7 +34,7 @@ void startUp(const float time)
         }
     }
 
-    if (time >= 2.0f)
+    if (time >= 1.0f)
     {
         setAnimationComplete();
         setAll(settings::getColorSetting(settings::Colors::Ambiant));

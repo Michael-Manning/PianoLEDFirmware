@@ -12,9 +12,9 @@ void stripInit();
 
 void setColor(uint8_t led, uint8_t r, uint8_t g, uint8_t b);
 
-void setColor(uint8_t led, color c);
-
 void setColor(uint8_t led, colorF c);
+
+colorF getColor(uint8_t led);
 
 void setAll(colorF c);
 

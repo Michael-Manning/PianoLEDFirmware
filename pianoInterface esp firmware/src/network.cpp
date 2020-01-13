@@ -1,4 +1,4 @@
-#include <stdint.h>
+#include <Arduino.h>
 #include <WiFi.h>
 
 #include "circularBuffer.h"
@@ -30,6 +30,7 @@
  *      9 = restore default settings
  *      10 = get setting
  *      11 = change animation mode
+ *      12 = commit settings
  * 
  * ------------------------------
  * 
@@ -100,6 +101,19 @@
  * 
  * change animation mode:
  * byte 2 animation number
+ *      animation number:
+ *          0: None
+ *          1: Ambiant
+ *          2: ColorfulIdle
+ *          3: KeyIndicate
+ *          4: KeyIndicateFade
+ *          5: Waiting
+ *          
+ * -------- 12
+ * 
+ * commit settings:
+ * none 
+ * 
  */
 
 namespace
@@ -279,9 +293,7 @@ void pollEvents()
         }
         else
         {
-            char buffer[128];
-            sprintf(buffer, "OK: Looping from %d to %d", loopStart, loopEnd);
-            client.print(buffer);
+            formattedClientReply( "OK: Looping from %d to %d", loopStart, loopEnd);
         }
     }
     break;
@@ -306,19 +318,13 @@ void pollEvents()
 
         if (!assert_fatal(expectedSongLength <= music::maxSongLength && expectedSongLength != 0, ErrorCode::SONG_LOAD_DISCONTINUITY))
         {
-            char buffer[128];
-            sprintf(buffer, "ER:Song length out of range: %d", expectedSongLength);
-            client.print(buffer);
+            formattedClientReply( "ER:Song length out of range: %d", expectedSongLength);
             client.stop();
             return;
         }
 
         // reply OK
-        {
-            char buffer[128];
-            sprintf(buffer, "Song header OK. Length: %d", expectedSongLength);
-            client.print(buffer);
-        }
+        formattedClientReply( "Song header OK. Length: %d", expectedSongLength);
 
         // update progress bar
         music::resetSongLoader();
@@ -364,9 +370,7 @@ void pollEvents()
             // ERROR: frame was skipped
             fatalError(ErrorCode::SONG_LOAD_DISCONTINUITY);
 
-            char buffer[128];
-            sprintf(buffer, "ER:Frame skip detected. Last: %d, Recieved: %d", loaderFrameIndex, incommingFrameIndex);
-            client.print(buffer);
+            formattedClientReply("ER:Frame skip detected. Last: %d, Recieved: %d", loaderFrameIndex, incommingFrameIndex);
             client.stop();
             return;
         }
@@ -393,11 +397,7 @@ void pollEvents()
         }
 
         // Reply with OK + debug info
-        {
-            char buffer[128];
-            sprintf(buffer, "OK: %d notes loaded for frame %d", frameNoteIndex, loaderFrameIndex);
-            client.print(buffer);
-        }
+        formattedClientReply("OK: %d notes loaded for frame %d", frameNoteIndex, loaderFrameIndex);
 
         // Update the progress bar display
         Event e;
@@ -413,10 +413,8 @@ void pollEvents()
     {
         if (loaderFrameIndex != expectedSongLength - 1)
         {
-            char buffer[128];
-            sprintf(buffer, "ER:Expected %d notes, but only recieved %d", expectedSongLength - 1, loaderFrameIndex);
+            formattedClientReply("ER:Expected %d notes, but only recieved %d", expectedSongLength - 1, loaderFrameIndex);
             fatalError(ErrorCode::SONG_LOAD_DISCONTINUITY);
-            client.print(buffer);
         }
         else
         {
@@ -443,9 +441,7 @@ void pollEvents()
     {
         uint16_t newIndex = concatBytes(messageBuffer[1], messageBuffer[2]);
         music::setFrame(newIndex);
-        char buffer[128];
-        sprintf(buffer, "OK: index set to [%d]", music::currentFrameIndex());
-        client.print(buffer);
+        formattedClientReply("OK: index set to [%d]", music::currentFrameIndex());
 
         Event e;
         e.action = []() {
@@ -459,23 +455,18 @@ void pollEvents()
     {
         if (isErrorLocked())
         {
-            char buffer[128];
-            sprintf(buffer, "Status: Error lock code: %d", static_cast<uint8_t>(getCurrentError()));
-            client.print(buffer);
+            formattedClientReply("Status: Error lock code: %d", static_cast<uint8_t>(getCurrentError()));
         }
         else
         {
-            formattedClientReply("OK TEST %d", 1235);
-            //client.print("Status: OK");
+            client.print("Status: OK");
         }
     }
     break;
     // get current frame index
     case 8:
     {
-        char buffer[128];
-        sprintf(buffer, "OK:%d", music::currentFrameIndex());
-        client.print(buffer);
+        formattedClientReply("OK:%d", music::currentFrameIndex());
     }
     break;
     // restore default settings
@@ -498,29 +489,53 @@ void pollEvents()
 
         color col = settings::getColorSetting(static_cast<unsigned int>(messageBuffer[1]));
         {
-            char buffer[128];
-            sprintf(buffer, "OK:%d,%d,%d", col.r, col.b, col.b);
-            client.print(buffer);
+            // formattedClientReply("OK:%c%c%c", col.r, col.b, col.b);
+            formattedClientReply("OK:%d,%d,%d", col.r, col.g, col.b);
         }
     }
     break;
-    // Get setting
+    // Set animation mode
     case 11:
     {
-        // if(messageBuffer[1] > 7)
-        // {
-        //     fatalError(ErrorCode::INVALID_SETTING);
-        //     client.print("ER:Invalid setting");
-        //     client.stop();
-        //     return;
-        // }
-
-        // color col = settings::getColorSetting(static_cast<unsigned int>(messageBuffer[1]));
-        // {
-        //     char buffer[128];
-        //     sprintf(buffer, "OK:%d,%d,%d", col.r, col.b, col.b);
-        //     client.print(buffer);
-        // }
+        if(messageBuffer[1] > 5)
+        {
+            formattedClientReply("ER: Invalid animation number: %d", messageBuffer[1]);
+            client.stop();
+            return;
+        }
+        switch (messageBuffer[1])
+        {
+        case 0:
+            _pushModeSwitchEvent(lights::AnimationMode::None);
+            break;
+        case 1:
+            _pushModeSwitchEvent(lights::AnimationMode::Ambiant);
+            break;
+        case 2:
+            _pushModeSwitchEvent(lights::AnimationMode::ColorfulIdle);
+            break;
+        case 3:
+            _pushModeSwitchEvent(lights::AnimationMode::KeyIndicate);
+            break;
+        case 4:
+            _pushModeSwitchEvent(lights::AnimationMode::KeyIndicateFade);
+            break;
+        case 5:
+            _pushModeSwitchEvent(lights::AnimationMode::Waiting);
+            break;
+        default:
+            formattedClientReply("ER:Internal %d", __LINE__);
+            fatalError(ErrorCode::IMPOSSIBLE_INTERNAL);
+            break;
+        }
+        client.print("OK: Mode updated");
+    }
+    break;
+    // commit settings
+    case 12:
+    {   
+        settings::commitSettings();
+        client.print("OK: settings commited");
     }
     break;
     default:

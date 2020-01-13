@@ -29,6 +29,12 @@ void waiting(float deltaTime, bool firstFrame, bool fullRefresh)
         }
     }
 
+    colorF WW = settings::getColorSetting(settings::Colors::WaitingWhite);
+    colorF WB = settings::getColorSetting(settings::Colors::WaitingBlack);
+    colorF IFW = settings::getColorSetting(settings::Colors::InFrameWhite);
+    colorF IFB = settings::getColorSetting(settings::Colors::WaitingBlack);
+    colorF AMB = settings::getColorSetting(settings::Colors::Ambiant);
+
     setAll(Colors::Off);
 
     using namespace music;
@@ -44,7 +50,14 @@ void waiting(float deltaTime, bool firstFrame, bool fullRefresh)
         unsigned int keyIndex = (notes[index] - MIDI::ledNoteOffset);
         if (notes[index] >= MIDI::ledNoteOffset && notes[index] < _KEYCOUNT + MIDI::ledNoteOffset)
         {
-            keyFadeTargets[keyIndex] = Colors::Red;
+            if (music::isBlackNote(keyIndex))
+            {
+                keyFadeTargets[keyIndex] = WB;
+            }
+            else
+            {
+                keyFadeTargets[keyIndex] = WW;
+            }
             if (pressedThisFrame[notes[index] - MIDI::ledNoteOffset] && MIDI::getNoteState(notes[index]))
             {
                 keyTimers[keyIndex] = inFrameFadeTime;
@@ -63,7 +76,6 @@ void waiting(float deltaTime, bool firstFrame, bool fullRefresh)
 
     if (allInFrame)
     {
-        //memset(pressedThisFrame, false, sizeof(pressedThisFrame));
         nextFrame();
     }
     if (allInFrame || firstFrame || fullRefresh)
@@ -78,7 +90,7 @@ void waiting(float deltaTime, bool firstFrame, bool fullRefresh)
             }
             else
             {
-                keyFadeTargets[i] = settings::getColorSetting(settings::Colors::Ambiant);
+                keyFadeTargets[i] = AMB;
             }
         }
     }
@@ -86,7 +98,9 @@ void waiting(float deltaTime, bool firstFrame, bool fullRefresh)
     // colors
     for (size_t i = 0; i < _KEYCOUNT; i++)
     {
-        // setColor(_KEYCOUNT - 1 - i, keyFadeTargets[i]);
+        bool black = music::isBlackNote(i + MIDI::ledNoteOffset);
+
+        // skip needless division
         if (keyTimers[i] == 0)
         {
             setColor(_KEYCOUNT - 1 - i, keyFadeTargets[i]);
@@ -94,7 +108,7 @@ void waiting(float deltaTime, bool firstFrame, bool fullRefresh)
         else
         {
             float t = ((float)keyTimers[i] / inFrameFadeTime);
-            colorF col = mix(Colors::Green, keyFadeTargets[i], 1.0f - t);
+            colorF col = mix(black ? IFB : IFW, keyFadeTargets[i], 1.0f - t);
             setColor(_KEYCOUNT - 1 - i, col);
         }
         keyTimers[i] -= deltaTime;

@@ -1,6 +1,8 @@
 #include <Arduino.h>
 
+#include "../m_constants.h"
 #include "../m_error.h"
+#include "../settings.h"
 #include "animator.h"
 #include "color.h"
 #include "LEDCom.h"
@@ -19,7 +21,6 @@ float progressBarValue = 0.0f;
 // </AnimationParameters
 
 } // namespace
-
 
 namespace lights
 {
@@ -50,7 +51,8 @@ void setAnimationMode(AnimationMode mode)
 }
 
 // Skips less steps in certain animation modes
-void forceRefresh(){
+void forceRefresh()
+{
     fullRefresh = true;
 }
 
@@ -69,30 +71,44 @@ void updateAnimation()
 
     switch (animationMode)
     {
+    case AnimationMode::None : 
+        LEDCom::setAll(Colors::Off);
+        break;
+    case AnimationMode::Ambiant : 
+        for (size_t i = 0; i < _KEYCOUNT; i++)
+        {
+            //if!blackkey
+            LEDCom::setAll(settings::getColorSetting(settings::Colors::Ambiant));
+        }
+        
+        break;
     case AnimationMode::Startup:
         animations::startUp(time);
-    break;
+        break;
     case AnimationMode::PulseError:
         animations::pulseError(time);
-    break;
+        break;
     case AnimationMode::BlinkSuccess:
         animations::blinkSuccess(time);
-    break;
+        break;
     case AnimationMode::ColorfulIdle:
         animations::colorfulIdle(time);
-    break;
+        break;
     case AnimationMode::ProgressBar:
         animations::progressBar(progressBarValue);
-    break;
+        break;
     case AnimationMode::KeyIndicate:
         animations::keyIndicate();
-    break;
+        break;
     case AnimationMode::KeyIndicateFade:
-        animations::keyIndicateFade(deltaTime);
-    break;
+        animations::rainbowFade(deltaTime, time); //animations::keyIndicateFade(deltaTime);
+        break;
     case AnimationMode::Waiting:
         animations::waiting(deltaTime, animationFirstFrame, fullRefresh);
-    break;
+        break;
+    case AnimationMode::Wave :
+        animations::wave(deltaTime, animationFirstFrame);
+        break;
     default:
         fatalError(ErrorCode::IMPOSSIBLE_INTERNAL);
         break;

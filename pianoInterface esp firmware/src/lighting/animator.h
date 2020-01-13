@@ -25,7 +25,9 @@ extern float keyTimers[_KEYCOUNT]; // general use per-key timers for animations
 extern colorF keyFadeTargets[_KEYCOUNT]; // general use colorLayer
 extern bool pressedThisFrame[_KEYCOUNT]; // keeps track of notes that have been pressed this frame (not just held down from the last frame)
 
-void setColor(uint8_t led, colorF color);
+void setColor(uint8_t led, colorF col);
+
+void addColor(uint8_t led, colorF col);
 
 void setAll(colorF c);
 
@@ -48,6 +50,8 @@ namespace animations
     void keyIndicate();
     void keyIndicateFade(const float deltaTime);
     void waiting(const float deltaTime, bool firstFrame, bool fullRefresh);
+    void wave(const float deltaTime, bool firstFrame);
+    void rainbowFade(const float deltaTime, const float time);
 }
 
 #endif

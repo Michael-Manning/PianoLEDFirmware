@@ -19,8 +19,6 @@ void PollThreadFunc(void *pvParameters);
 unsigned long poll100Timer = 0;
 void poll100();
 
-
-
 void setup()
 {
   Serial.begin(115200);
@@ -74,14 +72,15 @@ void PollThreadFunc(void *pvParameters)
     }
 
     lights::setAnimationMode(lights::AnimationMode::KeyIndicateFade);
+    //lights::setAnimationMode(lights::AnimationMode::KeyIndicateFade);
     MIDI::setLogicalLayerEnable(true);
   };
 
-   if (network::waitForConnection())
-   {
-     network::startServer();
-     PushEvent(e);
-   }
+  if (network::waitForConnection())
+  {
+    network::startServer();
+    PushEvent(e);
+  }
 
   // THREAD 1 endless loop
   for (;;)
@@ -112,7 +111,7 @@ void loop()
     }
   }
 
-  // call the slow poll 
+  // call the slow poll
   unsigned long time;
   time = micros();
   if (time >= poll100Timer + (1000000 / 100))

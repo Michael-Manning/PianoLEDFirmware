@@ -18,6 +18,11 @@ void init()
     EEPROM.begin(sizeof(color) * colorSettingCount + sizeof(float) * floatSettingCount + 10);
 }
 
+void commitSettings()
+{
+    EEPROM.commit();
+}
+
 // Set all settings to their default values
 void restoreDefaults()
 {
@@ -29,6 +34,7 @@ void restoreDefaults()
     saveColorSetting(settings::Colors::InFrameWhite, {0, 255, 0});
     saveColorSetting(settings::Colors::InFrameBlack, {0, 255, 0});
     saveFloatSetting(settings::Floats::IndicateFadeTime, 0.6f);
+    commitSettings();
 }
 
 void loadSettings()
@@ -52,14 +58,12 @@ void saveColorSetting(unsigned int setting, color value)
 {
     EEPROM.put(setting * sizeof(color), value);
     colorSettingValues[setting] = value;
-    EEPROM.commit();
 }
 
 void saveFloatSetting(settings::Floats setting, float value)
 {
     EEPROM.put(static_cast<unsigned int>(setting) * sizeof(float) + colorSettingCount * sizeof(color), value);
     floatSettingValues[static_cast<unsigned int>(setting)] = value;
-    EEPROM.commit();
 }
 
 color getColorSetting(settings::Colors setting)

@@ -1,6 +1,8 @@
 #include <Arduino.h>
 
+#include "../m_constants.h"
 #include "../m_error.h"
+#include "../pinaoCom.h"
 #include "LEDCom.h"
 #include "animator.h"
 
@@ -16,9 +18,16 @@ float keyTimers[_KEYCOUNT];
 colorF keyFadeTargets[_KEYCOUNT];
 bool pressedThisFrame[_KEYCOUNT];
 
+// sets a color to push to the strip at the end of the frame
 void setColor(uint8_t led, colorF c)
 {
     LEDCom::setColor(led, c);
+}
+
+// same as setColor, but adds to the existing color
+void addColor(uint8_t led, colorF c)
+{
+    LEDCom::setColor(led, LEDCom::getColor(led) + c);
 }
 
 void setAll(colorF c)
@@ -66,6 +75,14 @@ void resetAnimation()
 {
     animationComplete = false;
     memset(keyTimers, 0, sizeof(keyTimers));
+    //  reset all the events in the logical layer
+    if(MIDI::getLogicalLayerEnabled())
+    {
+        for (size_t i = 0; i < _PIANOSIZE; i++)
+        {
+            MIDI::getLogicalState(i);
+        }
+    }
 }
 
 void setAnimationComplete()

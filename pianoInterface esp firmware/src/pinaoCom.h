@@ -28,6 +28,7 @@ bool getLogicalState(uint8_t noteNumber);
 void copyLogicalStateBuffer();
 
 void setLogicalLayerEnable(bool enabled);
+bool getLogicalLayerEnabled();
 
 }
 
