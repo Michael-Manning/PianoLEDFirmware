@@ -93,6 +93,11 @@ void PollThreadFunc(void *pvParameters)
 // THREAD 0 endless loop
 void loop()
 {
+  // Check for any new firmware updates on the network
+  if(network::isConnected()){
+    network::pollOTA();
+  }
+
   // If there is an error, show the error code until reset
   if (isErrorLocked())
   {

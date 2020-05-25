@@ -12,6 +12,9 @@ namespace network
     bool isConnected();
 
     void pollEvents();
+
+    // Check the network for firmware updates
+    void pollOTA();
 }
 
 #endif

@@ -1,5 +1,7 @@
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 
 #include "circularBuffer.h"
 #include "lighting/lighting.h"
@@ -64,7 +66,7 @@
  * byte 6: note number
  * byte 7: note number 
  * byte 8: note number
- * NOTE: if there are less than 5 notes, empy bytes must be 255 NOT NULL
+ * NOTE: if there are less than 5 notes, empty bytes must be 255 NOT NULL
  * 
  * -------- 5
  * 
@@ -203,6 +205,22 @@ bool waitForConnection()
         return false;
     }
     connected = true;
+
+    // OTA stuff
+    ArduinoOTA.onStart([]() {
+        String type;
+        if (ArduinoOTA.getCommand() == U_FLASH)
+        {
+            type = "sketch";
+        }
+        else
+        { // U_SPIFFS
+            type = "filesystem";
+        }
+    });
+
+    ArduinoOTA.begin();
+
     return true;
 }
 
@@ -216,6 +234,10 @@ void startServer()
 bool isConnected()
 {
     return connected;
+}
+
+void pollOTA(){
+    ArduinoOTA.handle();
 }
 
 // Checks for incomming messages and handles them
