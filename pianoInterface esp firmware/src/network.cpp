@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <WiFi.h>
+#include <WebServer.h>
 #include <WiFiUdp.h>
 
 #include "circularBuffer.h"
@@ -139,6 +140,7 @@ namespace
     byte currentFrameNotes[_PIANOSIZE]; // Storage for loading notes in the frame before being memcopied by ::music
 
     WiFiServer server(80);
+    WebServer webServer(80);
     WiFiClient client; // persistant accross poll calls.
 
     // combine to bytes into the unsigned short they make together
@@ -170,11 +172,16 @@ namespace
         lights::setGreenLED(false);
         client.flush();
         client.stop();
+        debug::println("disconnected from client");
     }
 } // namespace
 
 namespace network
 {
+
+    void handleGetStatus(){
+        webServer.send(200, "text/plane", "OK");
+    }
 
     // Starts connecting to the WIFI network
     void beginConnection()
@@ -246,7 +253,9 @@ namespace network
     // Starts the TCP server
     void startServer()
     {
-        server.begin();
+        webServer.on("/getStatus", handleGetStatus);
+        webServer.begin();
+        //server.begin();
     }
 
     // Whether the network is currently connected
@@ -277,7 +286,10 @@ namespace network
     // Checks for incoming messages and handles them
     void pollEvents()
     {
+        webServer.handleClient();
+        return;
         // if no data received since last poll and/or in the last 2 seconds
+        connected &= client.connected();
         if (!connected)
         {
             client = server.available();
@@ -298,35 +310,22 @@ namespace network
             debug::println("Client already connected");
         }
 
-        debug::println("looking for a message");
-
-        // if (client.available() > 0)
-        // {
-        //     int count = 0;
-        //     while (client.available() < 8)
-        //     {
-        //         count ++;
-        //         delay(10);
-        //         if(count > 100)
-        //         {
-        //             disconnectClient();
-        //             return;
-        //         }
-        //     }
-        // }
-
         // At this point we can assume the client is the same as the client from a previous message.
         // wait for the minimum message length
-        if(client.available() < 8)
+        int waiting = client.available();
+        if(waiting < 8)
         {
-            debug::println("less than 8 bytes waiting");
+            debug::printf("only %d bytes waiting\n", waiting);
             if (millis() - lastMessageMillis > 2000)
             {
                 debug::println("Timed out waiting for full message");
-                formattedClientReply("ER: Timed out waiting for data. Received %d / 8", client.available());
+                //formattedClientReply("ER: Timed out waiting for data. Received %d / 8", client.available());
                 disconnectClient();
             }
             return;
+        }
+        else{
+            debug::println("received more than 7 bytes");
         }
 
         // At this point we know there is client connected or still connected
@@ -420,6 +419,7 @@ namespace network
         }
         else
         {
+            debug::println("Unusual number of bytes in message");
             fatalError(ErrorCode::TCP_MESSAGE_INCOMPLETE);
             return;
         }

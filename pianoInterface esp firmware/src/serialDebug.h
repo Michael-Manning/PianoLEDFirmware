@@ -7,6 +7,7 @@ namespace debug
 {
     void print(const char * message);
     void println(const char * message);
+    void printf(char *fmt, ...);
 } 
 
 #endif

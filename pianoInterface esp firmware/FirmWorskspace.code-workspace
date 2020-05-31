@@ -16,7 +16,8 @@
 			"array": "cpp",
 			"functional": "cpp",
 			"tuple": "cpp",
-			"algorithm": "cpp"
+			"algorithm": "cpp",
+			"system_error": "cpp"
 		},
 		"cSpell.words": [
 			"println"
