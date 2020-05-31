@@ -15,120 +15,13 @@
 #include "settings.h"
 #include "serialDebug.h"
 
-/**
- * PROTOCOL SPECIFICATION:
- * 
- * Messages must be received once per 2 seconds to be concidered connected 
- * 
- * Message length : 8 bytes
- * 
- * byte 1: message type
- * 
- * message type: 
- *      1 = change setting
- *      2 = update loop setting
- *      3 = begin loading song
- *      4 = song data
- *      5 = end song loading
- *      6 = set song index
- *      7 = get status
- *      8 = get live frame index
- *      9 = restore default settings
- *      10 = get setting
- *      11 = change animation mode
- *      12 = commit settings
- * 
- * ------------------------------
- * 
- * -------- 1
- * 
- * change setting:
- * byte 2: setting number
- * byte 3: data
- * byte 4: data
- * byte 5: data
- * byte 6: data
- * 
- * -------- 2
- * 
- * update loop setting:
- * byte 2: looping enabled 
- * byte 3&4: loop start index
- * byte 5&6: loop end index
- * 
- * -------- 3
- * 
- * begin loading song:
- * byte: 2&3 song index length
- * byte: 4&5 song note count
- * 
- * -------- 4
- * 
- * song data:
- * byte 2&3: frame index
- * byte 4: note number
- * byte 5: note number
- * byte 6: note number
- * byte 7: note number 
- * byte 8: note number
- * NOTE: if there are less than 5 notes, empty bytes must be 255 NOT NULL
- * 
- * -------- 5
- * 
- * end song loading:
- * none
- * 
- * -------- 6
- * 
- * set song index:
- * byte 2&3: song index 
- * 
- * -------- 7
- * 
- * get status
- * none 
- * 
- * -------- 8
- * 
- * get live frame index:
- * none 
- * 
- * -------- 9
- * 
- * restore default settings:
- * none 
- * 
- * -------- 10
- * 
- * get setting:
- * byte 2 setting number
- * 
- * 
- * -------- 11
- * 
- * change animation mode:
- * byte 2 animation number
- *      animation number:
- *          0: None
- *          1: Ambiant
- *          2: ColorfulIdle
- *          3: KeyIndicate
- *          4: KeyIndicateFade
- *          5: Waiting
- *          
- * -------- 12
- * 
- * commit settings:
- * none 
- * 
- */
-
 namespace
 {
     unsigned long lastMessageMillis = 0;
     bool connected = false; //message was received within the last 2 seconds
     byte messageBuffer[8];
     byte songStreamBuffer[music::maxNoteCount];
+    char songConversionBuffer[music::maxNoteCount];
 
     // these are for song loading
     unsigned int expectedSongLength = 0;
@@ -139,7 +32,6 @@ namespace
     byte frameNoteIndex;                // How many notes for the currently loading frame have been loaded
     byte currentFrameNotes[_PIANOSIZE]; // Storage for loading notes in the frame before being memcopied by ::music
 
-    WiFiServer server(80);
     WebServer webServer(80);
     WiFiClient client; // persistant accross poll calls.
 
@@ -174,14 +66,24 @@ namespace
         client.stop();
         debug::println("disconnected from client");
     }
+
+    constexpr int intArg(const char * name){
+        return webServer.arg(name).toInt();
+    }
 } // namespace
 
 namespace network
 {
-
-    void handleGetStatus(){
-        webServer.send(200, "text/plane", "OK");
-    }
+    void handleGetStatus();
+    void handleGetIndex();
+    void handleSetIndex();
+    void handleUploadSong();
+    void handleChangeSetting();
+    void handleUpdateLoopSetting();
+    void handleRestoreSettings();
+    void handleGetSettings();
+    void handleSetAnimationMode();
+    void handleSaveSettings();
 
     // Starts connecting to the WIFI network
     void beginConnection()
@@ -254,8 +156,16 @@ namespace network
     void startServer()
     {
         webServer.on("/getStatus", handleGetStatus);
+        webServer.on("/getSongIndex", handleGetIndex);
+        webServer.on("/setSongIndex", handleSetIndex);
+        webServer.on("/uploadSong", HTTP_POST, handleUploadSong);
+        webServer.on("/changeSetting", handleChangeSetting);
+        webServer.on("/updateLoopSetting", handleUpdateLoopSetting);
+        webServer.on("/restoreSettings", handleRestoreSettings);
+        webServer.on("/getSettings", handleGetSettings);
+        webServer.on("/setAnimationMode", handleSetAnimationMode);
+        webServer.on("/saveSettings", handleSaveSettings);
         webServer.begin();
-        //server.begin();
     }
 
     // Whether the network is currently connected
@@ -269,209 +179,119 @@ namespace network
         ArduinoOTA.handle();
     }
 
-    void handleMessage(byte messageBuffer[8]);
-    void changeSetting(byte messageBuffer[8]);
-    void updateLoopSetting(byte messageBuffer[8]);
-    void beginSongLoading(byte messageBuffer[8]);
-    void songData(byte messageBuffer[8]);
-    void songEnding(byte messageBuffer[8]);
-    void setSongIndex(byte messageBuffer[8]);
-    void getStatus(byte messageBuffer[8]);
-    void getCurrentFrameIndex();
-    void restoreSettings();
-    void getSetting(byte messageBuffer[8]);
-    void setAnimationMode(byte messageBuffer[8]);
-    void saveSettings();
-
     // Checks for incoming messages and handles them
     void pollEvents()
     {
         webServer.handleClient();
         return;
-        // if no data received since last poll and/or in the last 2 seconds
-        connected &= client.connected();
-        if (!connected)
+    }
+
+    void handleGetStatus()
+    {
+        webServer.send(200, "text/plane", "OK");
+    }
+
+    void handleGetIndex()
+    {
+        webServer.send(200, "text/plane", String(music::currentFrameIndex()));
+    }
+
+    void handleSetIndex()
+    {
+        music::setFrame(intArg("index"));
+        Event e;
+        e.action = []() {
+            lights::forceRefresh();
+        };
+        PushEvent(e);
+        webServer.send(200, "text/plane", "OK");
+    }
+
+    void handleUploadSong()
+    {
+        if (!webServer.hasArg("plain") || !webServer.hasArg("frames") || !webServer.hasArg("notes"))
         {
-            client = server.available();
-            if (!client)
+            debug::println("no content");
+            webServer.send(400, "text/html", "no content");
+            return;
+        }
+
+        expectedSongLength = intArg("frames");
+        expectedNoteCount = intArg("notes");
+
+        Serial.println("expecting " + String(expectedSongLength) + " frames and " + String(expectedNoteCount) + " notes");
+
+        frameNoteIndex = 0;
+        loaderFrameIndex = 0;
+        
+        String data = webServer.arg("plain");
+
+        data.toCharArray(songConversionBuffer, music::maxNoteCount);
+        auto temp = reinterpret_cast<unsigned char *>(songConversionBuffer);
+
+        int byteCount = expectedNoteCount + expectedSongLength;
+        uint16_t lastFrameIndex = 0;
+        byte frameLength = 0;
+        uint16_t frameCount = 0, noteCount = 0;
+        for (size_t i = 0; i < byteCount; i++)
+        {
+           // Serial.printf("Data[%d]: %d", i, temp[i]);
+           // Serial.println("");
+            if (temp[i] == 250U)
             {
-                //debug::println("client is not available");
-                lights::setGreenLED(false);
-                return;
+                music::loadFrame(temp + lastFrameIndex, frameLength);
+                lastFrameIndex = i + 1;
+                frameCount++;
+                frameLength = 0;
+              //  Serial.printf("Framecount: %d" , frameCount);
+              //  Serial.println("");
             }
             else
             {
-                debug::println("client is available");
-                lights::setGreenLED(true);
-                lastMessageMillis = millis();
+                // songStreamBuffer[i] -= MIDI::noteNumberOffset;
+                noteCount++;
+                frameLength++;
             }
         }
-        else{
-            debug::println("Client already connected");
-        }
-
-        // At this point we can assume the client is the same as the client from a previous message.
-        // wait for the minimum message length
-        int waiting = client.available();
-        if(waiting < 8)
+     //   Serial.printf("Framecount: %d" , frameCount);
+      //  Serial.println("");
+        if (expectedNoteCount != noteCount || expectedSongLength != frameCount)
         {
-            debug::printf("only %d bytes waiting\n", waiting);
-            if (millis() - lastMessageMillis > 2000)
-            {
-                debug::println("Timed out waiting for full message");
-                //formattedClientReply("ER: Timed out waiting for data. Received %d / 8", client.available());
-                disconnectClient();
-            }
+         //   Serial.printf("ER: Unexpected song length. %d / %d frames, %d / %d notes", frameCount, expectedSongLength, noteCount, expectedNoteCount);
+           // Serial.println("");
+            webServer.send(200, "text/plain", "Failed");
+            fatalError(ErrorCode::SONG_LOAD_UNEXPECTED_FRAME_COUNT);
             return;
         }
-        else{
-            debug::println("received more than 7 bytes");
-        }
 
-        // At this point we know there is client connected or still connected
-        connected = true;
-        lights::setGreenLED(true);
-        lastMessageMillis = millis();
+        //debug::println("uploaded successfully");
+        webServer.send(200, "text/cool", "Upload ok");
 
-        // Blink the LED because a new, valid message came in
-        lights::BlinkBlueLED();
-        debug::println("Message complete");
-
-        // If the last message was a song header, this one should be a bunch of data
-        if(expectingSong)
-        {
-            // Note count + frame marker count
-            unsigned int byteCount = expectedNoteCount + expectedSongLength;
-
-            int time = millis();
-            while (client.available() < byteCount)
+        Event e;
+        e.action = []() {
+            lights::setAnimationMode(lights::AnimationMode::BlinkSuccess);
+            while (!lights::animationCompleted())
             {
-                if (millis() - time > 2000)
-                {
-                    formattedClientReply("ER: Timed out waiting for data. Received %d / %d", client.available(), byteCount);
-                    disconnectClient();
-                    return;
-                }
+                lights::updateAnimation();
             }
+            lights::setAnimationMode(lights::AnimationMode::Waiting);
+        };
+        PushEvent(e);
 
-            if (client.available() != byteCount)
-            {
-                formattedClientReply("ER: Expecting %d bytes, but %d were available", byteCount, client.available());
-                disconnectClient();
-                return;
-            }
-
-            client.readBytes(songStreamBuffer, byteCount);
-
-            uint16_t lastFrameIndex = 0;
-            byte frameLength = 0;
-            uint16_t frameCount = 0, noteCount = 0;;
-            for (size_t i = 0; i < byteCount; i++)
-            {
-                if (songStreamBuffer[i] == 250U)
-                {
-                    music::loadFrame(songStreamBuffer + lastFrameIndex, frameLength);
-                    lastFrameIndex = i +1;
-                    frameCount ++;
-                    frameLength = 0;
-                }
-                else{
-                    // songStreamBuffer[i] -= MIDI::noteNumberOffset;
-                    noteCount ++;
-                    frameLength++;
-                }
-            }
-
-
-            // formattedClientReply(" %d / %d frames, %d / %d notes", frameCount, expectedSongLength, noteCount, expectedNoteCount);
-            // disconnectClient();
-            // return;
-
-            if (expectedNoteCount != noteCount || expectedSongLength != frameCount)
-            {
-                formattedClientReply("ER: Unexpected song length. %d / %d frames, %d / %d notes", frameCount, expectedSongLength, noteCount, expectedNoteCount);
-                disconnectClient();
-                fatalError(ErrorCode::SONG_LOAD_UNEXPECTED_FRAME_COUNT);
-                return;
-            }
-
-            Event e;
-            e.action = []() {
-                lights::setAnimationMode(lights::AnimationMode::BlinkSuccess);
-                while (!lights::animationCompleted())
-                {
-                    lights::updateAnimation();
-                }
-                lights::setAnimationMode(lights::AnimationMode::Waiting);
-            };
-            PushEvent(e);
-
-            music::setLoopingSettings(true, 0, expectedSongLength - 1);
-            expectedSongLength = 0;
-            expectedNoteCount = 0;
-            formattedClientReply("OK: Song loaded. %d frames & %d notes", frameCount, noteCount);
-            expectingSong = false;
-        }
-        else if (client.available() == 8)
-        {
-            client.readBytes(messageBuffer, 8);
-            handleMessage(messageBuffer);
-        }
-        else
-        {
-            debug::println("Unusual number of bytes in message");
-            fatalError(ErrorCode::TCP_MESSAGE_INCOMPLETE);
-            return;
-        }
+        music::setLoopingSettings(true, 0, expectedSongLength - 1);
+        expectedSongLength = 0;
+        expectedNoteCount = 0;
     }
 
-    void handleMessage(byte messageBuffer[8])
-    {
-        switch (messageBuffer[0])
-        {
-        case 1:
-            changeSetting(messageBuffer);
-            break;
-        case 2:
-            updateLoopSetting(messageBuffer);
-            break;
-        case 3:
-            beginSongLoading(messageBuffer);
-            break;
-        case 4:
-            songData(messageBuffer);
-            break;
-        case 5:
-            songEnding(messageBuffer);
-            break;
-        case 6:
-            setSongIndex(messageBuffer);
-            break;
-        case 7:
-            getStatus(messageBuffer);
-            break;
-        case 8:
-            getCurrentFrameIndex();
-            break;
-        case 9:
-            restoreSettings();
-            break;
-        case 10:
-            getSetting(messageBuffer);
-            break;
-        case 11:
-            setAnimationMode(messageBuffer);
-            break;
-        case 12:
-            saveSettings();
-            break;
-        default:
-        {
-            formattedClientReply("ER:Unrecognized command header: %d", messageBuffer[0]);
-        }
-        break;
-        }
-    }
+
+
+
+
+
+
+
+
+
 
     void changeSetting(byte messageBuffer[8])
     {

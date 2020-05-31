@@ -1,7 +1,9 @@
+#include <Arduino.h>
 #include <stdint.h>
 
 #include "lighting/lighting.h"
 #include "m_error.h"
+#include "serialDebug.h"
 
 namespace
 {
@@ -25,6 +27,9 @@ bool fatalError(ErrorCode errorCode, bool exec)
     errorLock = true;
     currentError = errorCode;
     lights::setRedLED(true);
+    #ifdef ENABLE_SERIAL
+    Serial.println("ErrorCode: " + String(static_cast<uint8_t>(errorCode)));
+    #endif
     lights::displayErrorCode(static_cast<uint8_t>(errorCode));
     lights::setAnimationMode(lights::AnimationMode::PulseError);
     return false;

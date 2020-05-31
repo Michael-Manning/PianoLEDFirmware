@@ -17,7 +17,9 @@
 			"functional": "cpp",
 			"tuple": "cpp",
 			"algorithm": "cpp",
-			"system_error": "cpp"
+			"system_error": "cpp",
+			"*.tcc": "cpp",
+			"fstream": "cpp"
 		},
 		"cSpell.words": [
 			"println"
