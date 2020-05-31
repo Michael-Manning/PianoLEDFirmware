@@ -12,9 +12,12 @@
 #include "pinaoCom.h"
 #include "network.h"
 #include "settings.h"
+#include "serialDebug.h"
 
 /**
  * PROTOCOL SPECIFICATION:
+ * 
+ * Messages must be received once per 2 seconds to be concidered connected 
  * 
  * Message length : 8 bytes
  * 
@@ -55,7 +58,8 @@
  * -------- 3
  * 
  * begin loading song:
- * byte: 2&3 song index length;
+ * byte: 2&3 song index length
+ * byte: 4&5 song note count
  * 
  * -------- 4
  * 
@@ -120,233 +124,405 @@
 
 namespace
 {
-bool connected;
-byte messageBuffer[8];
+    unsigned long lastMessageMillis = 0;
+    bool connected = false; //message was received within the last 2 seconds
+    byte messageBuffer[8];
+    byte songStreamBuffer[music::maxNoteCount];
 
-// these are for song loading
-unsigned int expectedSongLength = 0;
-unsigned int loaderFrameIndex;      // What frame of the song was last loaded
-byte frameNoteIndex;                // How many notes for the currently loading frame have been loaded
-byte currentFrameNotes[_PIANOSIZE]; // Storage for loading notes in the frame before being memcopied by ::music
+    // these are for song loading
+    unsigned int expectedSongLength = 0;
+    unsigned int expectedNoteCount = 0;
+    // expecting the next message to be song data
+    bool expectingSong = false;
+    unsigned int loaderFrameIndex;      // What frame of the song was last loaded
+    byte frameNoteIndex;                // How many notes for the currently loading frame have been loaded
+    byte currentFrameNotes[_PIANOSIZE]; // Storage for loading notes in the frame before being memcopied by ::music
 
-WiFiServer server(80);
-WiFiClient client; // persistant accross poll calls.
+    WiFiServer server(80);
+    WiFiClient client; // persistant accross poll calls.
 
-// combine to bytes into the unsigned short they make together
-uint16_t concatBytes(uint8_t A, uint8_t B)
-{
-    uint16_t combined = A;
-    combined = combined << 8;
-    combined |= B;
-    return combined;
-}
+    // combine to bytes into the unsigned short they make together
+    uint16_t concatBytes(uint8_t A, uint8_t B)
+    {
+        uint16_t combined = A;
+        combined = combined << 8;
+        combined |= B;
+        return combined;
+    }
 
-void formattedClientReply(char *fmt, ...){
-    char buff[128];
-    va_list va;
-    va_start (va, fmt);
-    vsprintf (buff, fmt, va);
-    va_end (va);
-    sprintf(buff, "%s", buff);
-    client.print(buff);
-}
+    void ClientReply(const char * message){
+        client.println(message);
+    }
 
+    void formattedClientReply(char *fmt, ...)
+    {
+        char buff[128];
+        va_list va;
+        va_start(va, fmt);
+        vsprintf(buff, fmt, va);
+        va_end(va);
+        sprintf(buff, "%s", buff);
+        client.println(buff);
+    }
+
+    void disconnectClient(){
+        connected = false;
+        lights::setGreenLED(false);
+        client.flush();
+        client.stop();
+    }
 } // namespace
 
 namespace network
 {
 
-// Starts connecting to the WIFI network
-void beginConnection()
-{
-    //WiFi.setHostname(hostName);
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.begin(_SSID, _NETWORKKEY);
-}
-
-// Blocks until WIFI connection has been established.
-// Returns success.
-bool waitForConnection()
-{
-    unsigned int attempts = 0;
-    wl_status_t status;
-    do
+    // Starts connecting to the WIFI network
+    void beginConnection()
     {
-        status = WiFi.status();
-        delay(100);
-        attempts++;
-        if (attempts == 60)
+        //WiFi.setHostname(hostName);
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.begin(_SSID, _NETWORKKEY);
+    }
+
+    // Blocks until WIFI connection has been established.
+    // Returns success.
+    bool waitForConnection()
+    {
+        unsigned int attempts = 0;
+        wl_status_t status;
+        do
         {
-            switch (status)
+            status = WiFi.status();
+            delay(100);
+            attempts++;
+            if (attempts == 60)
             {
-            case WL_NO_SSID_AVAIL:
-                fatalError(ErrorCode::WIFI_NO_SSID_AVAIL);
-                break;
-            case WL_CONNECT_FAILED:
-                fatalError(ErrorCode::WIFI_CONNECTION_FAILED);
-                break;
-            case WL_CONNECTION_LOST:
-                fatalError(ErrorCode::WIFI_CONNECTION_LOST);
-                break;
-            case WL_DISCONNECTED:
-                fatalError(ErrorCode::WIFI_DISCONNECTED);
-                break;
-            default:
-                fatalError(ErrorCode::WIFI_CONNECTION_TIMEOUT);
-                break;
+                switch (status)
+                {
+                case WL_NO_SSID_AVAIL:
+                    fatalError(ErrorCode::WIFI_NO_SSID_AVAIL);
+                    break;
+                case WL_CONNECT_FAILED:
+                    fatalError(ErrorCode::WIFI_CONNECTION_FAILED);
+                    break;
+                case WL_CONNECTION_LOST:
+                    fatalError(ErrorCode::WIFI_CONNECTION_LOST);
+                    break;
+                case WL_DISCONNECTED:
+                    fatalError(ErrorCode::WIFI_DISCONNECTED);
+                    break;
+                default:
+                    fatalError(ErrorCode::WIFI_CONNECTION_TIMEOUT);
+                    break;
+                }
+                return false;
             }
+        } while (status != WL_CONNECTED);
+
+        if (status != WL_CONNECTED)
+        {
+            fatalError(ErrorCode::IMPOSSIBLE_INTERNAL);
             return false;
         }
-    } while (status != WL_CONNECTED);
 
-    if (status != WL_CONNECTED)
-    {
-        fatalError(ErrorCode::IMPOSSIBLE_INTERNAL);
-        return false;
+        // OTA stuff
+        ArduinoOTA.onStart([]() {
+            String type;
+            if (ArduinoOTA.getCommand() == U_FLASH)
+            {
+                type = "sketch";
+            }
+            else
+            { // U_SPIFFS
+                type = "filesystem";
+            }
+        });
+
+        ArduinoOTA.begin();
+
+        return true;
     }
-    connected = true;
 
-    // OTA stuff
-    ArduinoOTA.onStart([]() {
-        String type;
-        if (ArduinoOTA.getCommand() == U_FLASH)
-        {
-            type = "sketch";
-        }
-        else
-        { // U_SPIFFS
-            type = "filesystem";
-        }
-    });
-
-    ArduinoOTA.begin();
-
-    return true;
-}
-
-// Starts the TCP server
-void startServer()
-{
-    server.begin();
-}
-
-// Whether the network is currently connected
-bool isConnected()
-{
-    return connected;
-}
-
-void pollOTA(){
-    ArduinoOTA.handle();
-}
-
-// Checks for incomming messages and handles them
-void pollEvents()
-{
-    // Client may still be connected since last poll call
-    if (!client)
+    // Starts the TCP server
+    void startServer()
     {
-        // listen for incoming clients
-        client = server.available();
+        server.begin();
+    }
 
-        // Nobody trying to connect at this time
-        if (!client)
+    // Whether the network is currently connected
+    bool isConnected()
+    {
+        return connected;
+    }
+
+    void pollOTA()
+    {
+        ArduinoOTA.handle();
+    }
+
+    void handleMessage(byte messageBuffer[8]);
+    void changeSetting(byte messageBuffer[8]);
+    void updateLoopSetting(byte messageBuffer[8]);
+    void beginSongLoading(byte messageBuffer[8]);
+    void songData(byte messageBuffer[8]);
+    void songEnding(byte messageBuffer[8]);
+    void setSongIndex(byte messageBuffer[8]);
+    void getStatus(byte messageBuffer[8]);
+    void getCurrentFrameIndex();
+    void restoreSettings();
+    void getSetting(byte messageBuffer[8]);
+    void setAnimationMode(byte messageBuffer[8]);
+    void saveSettings();
+
+    // Checks for incoming messages and handles them
+    void pollEvents()
+    {
+        // if no data received since last poll and/or in the last 2 seconds
+        if (!connected)
         {
+            client = server.available();
+            if (!client)
+            {
+                //debug::println("client is not available");
+                lights::setGreenLED(false);
+                return;
+            }
+            else
+            {
+                debug::println("client is available");
+                lights::setGreenLED(true);
+                lastMessageMillis = millis();
+            }
+        }
+        else{
+            debug::println("Client already connected");
+        }
+
+        debug::println("looking for a message");
+
+        // if (client.available() > 0)
+        // {
+        //     int count = 0;
+        //     while (client.available() < 8)
+        //     {
+        //         count ++;
+        //         delay(10);
+        //         if(count > 100)
+        //         {
+        //             disconnectClient();
+        //             return;
+        //         }
+        //     }
+        // }
+
+        // At this point we can assume the client is the same as the client from a previous message.
+        // wait for the minimum message length
+        if(client.available() < 8)
+        {
+            debug::println("less than 8 bytes waiting");
+            if (millis() - lastMessageMillis > 2000)
+            {
+                debug::println("Timed out waiting for full message");
+                formattedClientReply("ER: Timed out waiting for data. Received %d / 8", client.available());
+                disconnectClient();
+            }
             return;
         }
-    }
 
-    // At this point we know there is client connected
+        // At this point we know there is client connected or still connected
+        connected = true;
+        lights::setGreenLED(true);
+        lastMessageMillis = millis();
 
-    // check if the client has any data it's trying to send
-    if (!client.available())
-    {
-        return;
-    }
+        // Blink the LED because a new, valid message came in
+        lights::BlinkBlueLED();
+        debug::println("Message complete");
 
-    // At this point we know the client has data it's trying to send us
-
-    // Wait for the correct number of bytes to become available
-    int attemps = 0;
-    while (client.available() != 8)
-    {
-        attemps++;
-        delay(10);
-
-        // A full message is not available. Something went wrong.
-        if (attemps > 10)
+        // If the last message was a song header, this one should be a bunch of data
+        if(expectingSong)
         {
-            // Might not need to be fatal...
+            // Note count + frame marker count
+            unsigned int byteCount = expectedNoteCount + expectedSongLength;
+
+            int time = millis();
+            while (client.available() < byteCount)
+            {
+                if (millis() - time > 2000)
+                {
+                    formattedClientReply("ER: Timed out waiting for data. Received %d / %d", client.available(), byteCount);
+                    disconnectClient();
+                    return;
+                }
+            }
+
+            if (client.available() != byteCount)
+            {
+                formattedClientReply("ER: Expecting %d bytes, but %d were available", byteCount, client.available());
+                disconnectClient();
+                return;
+            }
+
+            client.readBytes(songStreamBuffer, byteCount);
+
+            uint16_t lastFrameIndex = 0;
+            byte frameLength = 0;
+            uint16_t frameCount = 0, noteCount = 0;;
+            for (size_t i = 0; i < byteCount; i++)
+            {
+                if (songStreamBuffer[i] == 250U)
+                {
+                    music::loadFrame(songStreamBuffer + lastFrameIndex, frameLength);
+                    lastFrameIndex = i +1;
+                    frameCount ++;
+                    frameLength = 0;
+                }
+                else{
+                    // songStreamBuffer[i] -= MIDI::noteNumberOffset;
+                    noteCount ++;
+                    frameLength++;
+                }
+            }
+
+
+            // formattedClientReply(" %d / %d frames, %d / %d notes", frameCount, expectedSongLength, noteCount, expectedNoteCount);
+            // disconnectClient();
+            // return;
+
+            if (expectedNoteCount != noteCount || expectedSongLength != frameCount)
+            {
+                formattedClientReply("ER: Unexpected song length. %d / %d frames, %d / %d notes", frameCount, expectedSongLength, noteCount, expectedNoteCount);
+                disconnectClient();
+                fatalError(ErrorCode::SONG_LOAD_UNEXPECTED_FRAME_COUNT);
+                return;
+            }
+
+            Event e;
+            e.action = []() {
+                lights::setAnimationMode(lights::AnimationMode::BlinkSuccess);
+                while (!lights::animationCompleted())
+                {
+                    lights::updateAnimation();
+                }
+                lights::setAnimationMode(lights::AnimationMode::Waiting);
+            };
+            PushEvent(e);
+
+            music::setLoopingSettings(true, 0, expectedSongLength - 1);
+            expectedSongLength = 0;
+            expectedNoteCount = 0;
+            formattedClientReply("OK: Song loaded. %d frames & %d notes", frameCount, noteCount);
+            expectingSong = false;
+        }
+        else if (client.available() == 8)
+        {
+            client.readBytes(messageBuffer, 8);
+            handleMessage(messageBuffer);
+        }
+        else
+        {
             fatalError(ErrorCode::TCP_MESSAGE_INCOMPLETE);
             return;
         }
     }
 
-    //At this point we know the connected client has a message of valid length
-    client.readBytes(messageBuffer, 8);
+    void handleMessage(byte messageBuffer[8])
+    {
+        switch (messageBuffer[0])
+        {
+        case 1:
+            changeSetting(messageBuffer);
+            break;
+        case 2:
+            updateLoopSetting(messageBuffer);
+            break;
+        case 3:
+            beginSongLoading(messageBuffer);
+            break;
+        case 4:
+            songData(messageBuffer);
+            break;
+        case 5:
+            songEnding(messageBuffer);
+            break;
+        case 6:
+            setSongIndex(messageBuffer);
+            break;
+        case 7:
+            getStatus(messageBuffer);
+            break;
+        case 8:
+            getCurrentFrameIndex();
+            break;
+        case 9:
+            restoreSettings();
+            break;
+        case 10:
+            getSetting(messageBuffer);
+            break;
+        case 11:
+            setAnimationMode(messageBuffer);
+            break;
+        case 12:
+            saveSettings();
+            break;
+        default:
+        {
+            formattedClientReply("ER:Unrecognized command header: %d", messageBuffer[0]);
+        }
+        break;
+        }
+    }
 
-    switch (messageBuffer[0])
+    void changeSetting(byte messageBuffer[8])
     {
-    // change setting
-    case 1:
-    {
-        if(messageBuffer[1] > 7)
+        if (messageBuffer[1] > 7)
         {
             fatalError(ErrorCode::INVALID_SETTING);
-            client.print("ER:Invalid setting");
-            client.stop();
+            ClientReply("ER:Invalid setting");
+            disconnectClient();
             return;
         }
 
         settings::saveColorSetting(static_cast<unsigned int>(messageBuffer[1]), {messageBuffer[2], messageBuffer[3], messageBuffer[4]});
-        client.print("OK: setting updated");
+        ClientReply("OK");
     }
-    break;
-    // update loop setting
-    case 2:
+
+    void updateLoopSetting(byte messageBuffer[8])
     {
         bool enabled = messageBuffer[1];
         uint16_t loopStart = concatBytes(messageBuffer[2], messageBuffer[3]);
         uint16_t loopEnd = concatBytes(messageBuffer[4], messageBuffer[5]);
         music::setLoopingSettings(enabled, loopStart, loopEnd);
-        if (!enabled)
-        {
-            client.print("OK: Looping disabled");
-        }
-        else
-        {
-            formattedClientReply( "OK: Looping from %d to %d", loopStart, loopEnd);
-        }
+        ClientReply("OK");
     }
-    break;
-    // begin song loading
-    case 3:
+
+    void beginSongLoading(byte messageBuffer[8])
     {
         //When a song is done loading, expected length is reset. If it is 0 here then something went wrong.
         if (!assert_fatal(expectedSongLength == 0, ErrorCode::SONG_LOAD_DISCONTINUITY))
         {
-            client.print("ER:Song length already set");
-            client.stop();
+            ClientReply("ER:Song length already set");
+            disconnectClient();
             return;
         }
 
-        unsigned short songLength = messageBuffer[1];
-        songLength = songLength << 8;
-        songLength |= messageBuffer[2];
-        expectedSongLength = songLength;
+        expectedSongLength = concatBytes(messageBuffer[1], messageBuffer[2]);
+        expectedNoteCount = concatBytes(messageBuffer[3], messageBuffer[4]);
 
         frameNoteIndex = 0;
         loaderFrameIndex = 0;
 
         if (!assert_fatal(expectedSongLength <= music::maxSongLength && expectedSongLength != 0, ErrorCode::SONG_LOAD_DISCONTINUITY))
         {
-            formattedClientReply( "ER:Song length out of range: %d", expectedSongLength);
-            client.stop();
+            formattedClientReply("ER:Song length out of range: %d", expectedSongLength);
+            disconnectClient();
             return;
         }
 
+        expectingSong = true;
+
         // reply OK
-        formattedClientReply( "Song header OK. Length: %d", expectedSongLength);
+        formattedClientReply("Song header OK. Length: %d", expectedSongLength);
 
         // update progress bar
         music::resetSongLoader();
@@ -357,24 +533,23 @@ void pollEvents()
         };
         PushEvent(e);
     }
-    break;
-    // song data
-    case 4:
+
+    void songData(byte messageBuffer[8])
     {
         uint16_t incommingFrameIndex = concatBytes(messageBuffer[1], messageBuffer[2]);
 
         if (!assert_fatal(incommingFrameIndex <= expectedSongLength, ErrorCode::INVALID_SONG_FRAME_INDEX))
         {
-            client.print("ER:Frame index out of expected range");
-            client.stop();
+            ClientReply("ER:Frame index out of expected range");
+            disconnectClient();
             return;
         }
 
         // If there are more notes being pressed at once than there are notes on the piano, we have an issue.
         if (!assert_fatal(frameNoteIndex <= 88, ErrorCode::SONG_LOAD_DISCONTINUITY))
         {
-            client.print("ER: Invalid note index");
-            client.stop();
+            ClientReply("ER: Invalid note index");
+            disconnectClient();
             return;
         }
 
@@ -393,7 +568,7 @@ void pollEvents()
             fatalError(ErrorCode::SONG_LOAD_DISCONTINUITY);
 
             formattedClientReply("ER:Frame skip detected. Last: %d, Recieved: %d", loaderFrameIndex, incommingFrameIndex);
-            client.stop();
+            disconnectClient();
             return;
         }
 
@@ -408,7 +583,7 @@ void pollEvents()
                 if (i == 3)
                 {
                     fatalError(ErrorCode::SONG_LOAD_DISCONTINUITY);
-                    client.stop();
+                    disconnectClient();
                     return;
                 }
                 break;
@@ -419,7 +594,8 @@ void pollEvents()
         }
 
         // Reply with OK + debug info
-        formattedClientReply("OK: %d notes loaded for frame %d", frameNoteIndex, loaderFrameIndex);
+        //formattedClientReply("OK: %d notes loaded for frame %d", frameNoteIndex, loaderFrameIndex);
+        ClientReply("OK");
 
         // Update the progress bar display
         Event e;
@@ -429,13 +605,12 @@ void pollEvents()
         };
         PushEvent(e);
     }
-    break;
-    // song ending
-    case 5:
+
+    void songEnding(byte messageBuffer[8])
     {
         if (loaderFrameIndex != expectedSongLength - 1)
         {
-            formattedClientReply("ER:Expected %d notes, but only recieved %d", expectedSongLength - 1, loaderFrameIndex);
+            formattedClientReply("ER:Expected %d notes, but only received %d", expectedSongLength - 1, loaderFrameIndex);
             fatalError(ErrorCode::SONG_LOAD_DISCONTINUITY);
         }
         else
@@ -453,17 +628,19 @@ void pollEvents()
 
             music::setLoopingSettings(true, 0, expectedSongLength - 1);
             expectedSongLength = 0;
+            expectedNoteCount = 0;
 
-            client.print("OK: Song loaded");
+            ClientReply("OK: Song loaded");
         }
+        expectingSong = false;
     }
-    break;
-    // set song index
-    case 6:
+
+    void setSongIndex(byte messageBuffer[8])
     {
         uint16_t newIndex = concatBytes(messageBuffer[1], messageBuffer[2]);
         music::setFrame(newIndex);
-        formattedClientReply("OK: index set to [%d]", music::currentFrameIndex());
+        //formattedClientReply("OK: index set to [%d]", music::currentFrameIndex());
+        ClientReply("OK");
 
         Event e;
         e.action = []() {
@@ -471,9 +648,8 @@ void pollEvents()
         };
         PushEvent(e);
     }
-    break;
-    // get status
-    case 7:
+
+    void getStatus(byte messageBuffer[8])
     {
         if (isErrorLocked())
         {
@@ -481,31 +657,28 @@ void pollEvents()
         }
         else
         {
-            client.print("Status: OK");
+            ClientReply("Status: OK");
         }
     }
-    break;
-    // get current frame index
-    case 8:
+
+    void getCurrentFrameIndex()
     {
         formattedClientReply("OK:%d", music::currentFrameIndex());
     }
-    break;
-    // restore default settings
-    case 9:
-    {   
-        settings::restoreDefaults();
-        client.print("OK: Default settings restored");
-    }
-    break;
-    // Get setting
-    case 10:
+
+    void restoreSettings()
     {
-        if(messageBuffer[1] > 7)
+        settings::restoreDefaults();
+        ClientReply("OK");
+    }
+
+    void getSetting(byte messageBuffer[8])
+    {
+        if (messageBuffer[1] > 7)
         {
             fatalError(ErrorCode::INVALID_SETTING);
-            client.print("ER:Invalid setting");
-            client.stop();
+            ClientReply("ER:Invalid setting");
+            disconnectClient();
             return;
         }
 
@@ -515,14 +688,13 @@ void pollEvents()
             formattedClientReply("OK:%d,%d,%d", col.r, col.g, col.b);
         }
     }
-    break;
-    // Set animation mode
-    case 11:
+
+    void setAnimationMode(byte messageBuffer[8])
     {
-        if(messageBuffer[1] > 5)
+        if (messageBuffer[1] > 5)
         {
             formattedClientReply("ER: Invalid animation number: %d", messageBuffer[1]);
-            client.stop();
+            disconnectClient();
             return;
         }
         switch (messageBuffer[1])
@@ -550,23 +722,12 @@ void pollEvents()
             fatalError(ErrorCode::IMPOSSIBLE_INTERNAL);
             break;
         }
-        client.print("OK: Mode updated");
+        ClientReply("OK");
     }
-    break;
-    // commit settings
-    case 12:
-    {   
-        settings::commitSettings();
-        client.print("OK: settings commited");
-    }
-    break;
-    default:
+
+    void saveSettings()
     {
-        char buffer[128];
-        sprintf(buffer, "ER:Unrecognized command header: %d", messageBuffer[0]);
-        client.print(buffer);
+        settings::commitSettings();
+        ClientReply("OK");
     }
-    break;
-    }
-}
 } // namespace network

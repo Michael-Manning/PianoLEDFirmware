@@ -12,6 +12,7 @@
 #include "src/network.h"
 #include "src/pinaoCom.h"
 #include "src/settings.h"
+#include "src/serialDebug.h"
 
 TaskHandle_t taskA;
 void PollThreadFunc(void *pvParameters);
@@ -21,14 +22,17 @@ void poll100();
 
 void setup()
 {
+#ifdef ENABLE_SERIAL
   Serial.begin(115200);
+  Serial.println("Started");
+#endif
 
   settings::init();
   //settings::restoreDefaults();
   settings::loadSettings();
-  settings::dumpToSerial();
+  settings::dumpToSerial(); 
 
-  // Assuiming the USB shield is connected, there's no reason this should fail.
+  // Assuming the USB shield is connected, there's no reason this should fail.
   bool USBSuccess = MIDI::initUSBHost();
 
   // Connect to strip and display the startup animation
@@ -72,7 +76,7 @@ void PollThreadFunc(void *pvParameters)
     }
 
     lights::setAnimationMode(lights::AnimationMode::KeyIndicateFade);
-    //lights::setAnimationMode(lights::AnimationMode::KeyIndicateFade);
+    
     MIDI::setLogicalLayerEnable(true);
   };
 

@@ -19,7 +19,8 @@ enum class ErrorCode{
     INVALID_LOOP_SETTING = 142,
     NOT_IMPLIMENTED = 143, // Unfinished section of code was accessed by accident
     NO_ERROR = 144,
-    INVALID_SETTING = 145
+    INVALID_SETTING = 145,
+    SONG_LOAD_UNEXPECTED_FRAME_COUNT = 146
 };
 
 bool isErrorLocked();

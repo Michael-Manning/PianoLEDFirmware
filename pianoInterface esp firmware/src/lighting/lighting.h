@@ -35,6 +35,19 @@ void forceRefresh();
 void updateAnimation();
 void displayErrorCode(uint8_t error);
 bool animationCompleted();
+
+
+// Regular LEDs
+constexpr int redLEDPin = 15;
+constexpr int greenLEDPin = 2;
+constexpr int blueLEDPin = 4;
+
+void setRedLED(bool state);
+void setGreenLED(bool state);
+void setBlueLED(bool state);
+void BlinkBlueLED();
+void updateBlueLED(float deltaTime);
+
 };
 
 #endif

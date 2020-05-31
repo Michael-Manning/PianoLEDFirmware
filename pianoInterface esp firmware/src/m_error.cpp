@@ -24,6 +24,7 @@ bool fatalError(ErrorCode errorCode, bool exec)
     }
     errorLock = true;
     currentError = errorCode;
+    lights::setRedLED(true);
     lights::displayErrorCode(static_cast<uint8_t>(errorCode));
     lights::setAnimationMode(lights::AnimationMode::PulseError);
     return false;

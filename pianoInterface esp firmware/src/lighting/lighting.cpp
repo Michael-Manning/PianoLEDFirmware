@@ -39,6 +39,12 @@ void setProgressBarValue(float value)
 void init()
 {
     LEDCom::stripInit();
+    pinMode(redLEDPin, OUTPUT);
+    pinMode(greenLEDPin, OUTPUT);
+    pinMode(blueLEDPin, OUTPUT);
+    setRedLED(LOW);
+    setGreenLED(LOW);
+    setBlueLED(LOW);
 }
 
 // Sets the animation mode and starts running it
@@ -68,6 +74,9 @@ void updateAnimation()
     const float time = (float)micros() / 1000000.0f - animationStartTime;
     const float deltaTime = time - lastTime;
     lastTime = time;
+
+    // Update regular LEDs
+    updateBlueLED(deltaTime);
 
     switch (animationMode)
     {

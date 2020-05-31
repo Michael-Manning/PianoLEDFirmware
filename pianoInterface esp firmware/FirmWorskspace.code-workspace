@@ -15,7 +15,11 @@
 			"xutility": "cpp",
 			"array": "cpp",
 			"functional": "cpp",
-			"tuple": "cpp"
-		}
+			"tuple": "cpp",
+			"algorithm": "cpp"
+		},
+		"cSpell.words": [
+			"println"
+		]
 	}
 }

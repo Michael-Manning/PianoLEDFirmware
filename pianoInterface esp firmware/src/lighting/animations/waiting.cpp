@@ -32,7 +32,7 @@ void waiting(float deltaTime, bool firstFrame, bool fullRefresh)
     colorF WW = settings::getColorSetting(settings::Colors::WaitingWhite);
     colorF WB = settings::getColorSetting(settings::Colors::WaitingBlack);
     colorF IFW = settings::getColorSetting(settings::Colors::InFrameWhite);
-    colorF IFB = settings::getColorSetting(settings::Colors::WaitingBlack);
+    colorF IFB = settings::getColorSetting(settings::Colors::InFrameBlack);
     colorF AMB = settings::getColorSetting(settings::Colors::Ambiant);
 
     setAll(Colors::Off);
@@ -47,18 +47,30 @@ void waiting(float deltaTime, bool firstFrame, bool fullRefresh)
     unsigned int index = 0;
     while (true)
     {
-        unsigned int keyIndex = (notes[index] - MIDI::ledNoteOffset);
-        if (notes[index] >= MIDI::ledNoteOffset && notes[index] < _KEYCOUNT + MIDI::ledNoteOffset)
+        // get rid of last bit which is used to specify the hand
+        uint8_t note = notes[index] & 0b01111111;   
+        uint8_t hand = notes[index] & 0b10000000;
+        
+        unsigned int keyIndex = (note - MIDI::ledNoteOffset);
+        if (note >= MIDI::ledNoteOffset && note < _KEYCOUNT + MIDI::ledNoteOffset)
         {
-            if (music::isBlackNote(keyIndex))
-            {
-                keyFadeTargets[keyIndex] = WB;
-            }
-            else
-            {
-                keyFadeTargets[keyIndex] = WW;
-            }
-            if (pressedThisFrame[notes[index] - MIDI::ledNoteOffset] && MIDI::getNoteState(notes[index]))
+          //  if (music::isBlackNote(keyIndex))
+           // {
+                //keyFadeTargets[keyIndex] = WB;
+                //keyFadeTargets[keyIndex] = hand == 0 ? Colors::Red : Colors::Blue;
+
+                if( notes[index] > 100){
+                    keyFadeTargets[keyIndex] = Colors::Red;
+                }
+                else{
+                    keyFadeTargets[keyIndex] = Colors::Blue;
+                }
+          //  }
+           // else
+           // {
+                //keyFadeTargets[keyIndex] = WW;
+           // }
+            if (pressedThisFrame[note - MIDI::ledNoteOffset] && MIDI::getNoteState(note))
             {
                 keyTimers[keyIndex] = inFrameFadeTime;
             }

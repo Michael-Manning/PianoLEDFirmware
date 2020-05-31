@@ -16,7 +16,7 @@ struct songFrame
 };
 
 constexpr unsigned int maxSongLength = 5000;
-constexpr unsigned int maxNoteCount = 10000;
+constexpr unsigned int maxNoteCount = 8192;
 
 void resetSongLoader();
 
