@@ -7,6 +7,7 @@
             ],
             "includePath": [
                 "${workspaceRoot}",
+                "${workspaceRoot}\\lib\\**",
                 "C:\\Users\\Micha\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\1.0.4\\**",
                 "C:\\Users\\Micha\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\1.0.4\\libraries\\FS\\src\\**",
                 "C:\\Users\\Micha\\AppData\\Local\\Arduino15\\packages\\esp32\\tools\\**",
