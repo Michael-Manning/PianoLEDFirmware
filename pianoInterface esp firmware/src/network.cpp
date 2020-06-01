@@ -50,7 +50,9 @@ namespace network
     void handleSetIndex();
     void handleUploadSong();
     void handleChangeSetting();
-    void handleUpdateLoopSetting();
+    void handleSetLoopSetting();
+    void handleGetLoopSetting();
+    void handleGetSongName();
     void handleRestoreSettings();
     void handleGetSettings();
     void handleSetAnimationMode();
@@ -130,8 +132,10 @@ namespace network
         webServer.on("/getSongIndex", handleGetIndex);
         webServer.on("/setSongIndex", handleSetIndex);
         webServer.on("/uploadSong", HTTP_POST, handleUploadSong);
+        webServer.on("/getSongName", handleGetSongName);
         webServer.on("/changeSetting", handleChangeSetting);
-        webServer.on("/updateLoopSetting", handleUpdateLoopSetting);
+        webServer.on("/setLoopSetting", handleSetLoopSetting);
+        webServer.on("/getLoopSetting", handleGetLoopSetting);
         webServer.on("/restoreSettings", handleRestoreSettings);
         webServer.on("/getSettings", handleGetSettings);
         webServer.on("/setAnimationMode", handleSetAnimationMode);
@@ -181,13 +185,14 @@ namespace network
 
     void handleUploadSong()
     {
-        if (!webServer.hasArg("plain") || !webServer.hasArg("frames") || !webServer.hasArg("notes"))
+        if (!webServer.hasArg("plain") || !webServer.hasArg("name") || !webServer.hasArg("frames") || !webServer.hasArg("notes"))
         {
             debug::println("no content");
-            webServer.send(400, "text/html", "no content");
+            webServer.send(400, "text/html", "missing parameter");
             return;
         }
 
+        music::setSongName(webServer.arg("name"));
         unsigned int expectedSongLength = intArg("frames");
         unsigned int expectedNoteCount = intArg("notes");
 
@@ -200,6 +205,8 @@ namespace network
 
         data.toCharArray(songConversionBuffer, music::maxNoteCount);
         auto temp = reinterpret_cast<unsigned char *>(songConversionBuffer);
+
+        music::resetSongLoader();
 
         int byteCount = expectedNoteCount + expectedSongLength;
         uint16_t lastFrameIndex = 0;
@@ -244,6 +251,11 @@ namespace network
         music::setLoopingSettings(true, 0, expectedSongLength - 1);
     }
 
+    void handleGetSongName()
+    {
+        webServer.send(200, "text/plane", music::getSongName());
+    }
+
     void handleChangeSetting()
     {
         int setting = intArg("setting");
@@ -259,13 +271,19 @@ namespace network
         settings::saveColorSetting(static_cast<unsigned int>(setting), {argA, argB, argC});
     }
 
-    void handleUpdateLoopSetting()
+    void handleSetLoopSetting()
     {
         bool enabled = intArg("enabled");
         int loopStart = intArg("start");
         int loopEnd = intArg("end");
         music::setLoopingSettings(enabled, loopStart, loopEnd);
         webServer.send(200, "text/plane", "OK");
+    }
+    void handleGetLoopSetting()
+    {
+        int enabled = music::getLoopingEnabled() ? 1: 0;
+        String reply = String(enabled) + "," + String(music::getLoopStart()) + "," + String(music::getLoopEnd());
+        webServer.send(200, "text/plane", reply);
     }
 
     void handleRestoreSettings()

@@ -1,6 +1,7 @@
 #ifndef MUSIC_H
 #define MUSIC_H
 
+#include <Arduino.h>
 #include <stdint.h>
 
 #include "m_constants.h"
@@ -33,6 +34,13 @@ void nextFrame();
 void setFrame(unsigned int index);
 
 void setLoopingSettings(bool enabled, unsigned int start, unsigned int end);
+
+bool getLoopingEnabled();
+int getLoopStart();
+int getLoopEnd();
+
+void setSongName(String name);
+String getSongName();
 
 constexpr unsigned int noteNumberInOctive(unsigned int note)
 {

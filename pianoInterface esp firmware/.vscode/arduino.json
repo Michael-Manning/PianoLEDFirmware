@@ -3,5 +3,5 @@
     "board": "esp32:esp32:esp32doit-devkit-v1",
     "configuration": "FlashFreq=80,UploadSpeed=512000,DebugLevel=none",
     "output": "../build",
-    "port": "COM4"
+    "port": "192.168.1.80"
 }

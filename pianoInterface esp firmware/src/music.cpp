@@ -10,6 +10,8 @@ namespace
 music::songFrame frameData[music::maxSongLength]; // all the frames in the song
 byte noteData[music::maxNoteCount];               // all the actual notes in the  song
 
+String songName = "no song loaded";
+
 unsigned int frameLoaderIndex = 0; // tracks what frame is being loaded in
 unsigned int notesLoaded = 0;      // how many notes have been loaded in so far
 unsigned int liveFrameIndex = 0;   // the current frame being played
@@ -111,6 +113,28 @@ void setLoopingSettings(bool enabled, unsigned int start, unsigned int end)
     // set the frame to the current frame to check if the current frame
     // is now out of looping range
     setFrame(liveFrameIndex);
+}
+bool getLoopingEnabled()
+{
+    return looping;
+}
+int getLoopStart()
+{
+    return loopStart;
+}
+int getLoopEnd()
+{
+    return loopEnd;
+}
+
+void setSongName(String name)
+{
+    songName = name;
+}
+
+String getSongName()
+{
+    return songName;
 }
 
 } // namespace music

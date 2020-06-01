@@ -120,7 +120,12 @@ void waiting(float deltaTime, bool firstFrame, bool fullRefresh)
         else
         {
             float t = ((float)keyTimers[i] / inFrameFadeTime);
-            colorF col = mix(black ? IFB : IFW, keyFadeTargets[i], 1.0f - t);
+
+            colorF inFrameCol = allInFrame ? color{230, 255, 230} : Colors::Green;
+
+            colorF col = mix(inFrameCol, keyFadeTargets[i], 1.0f - t);
+
+            //colorF col = mix(black ? IFB : IFW, keyFadeTargets[i], 1.0f - t);
             setColor(_KEYCOUNT - 1 - i, col);
         }
         keyTimers[i] -= deltaTime;
